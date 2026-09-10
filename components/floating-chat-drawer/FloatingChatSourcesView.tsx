@@ -230,7 +230,7 @@ export function FloatingChatSourcesView({
               const playbackId = getMuxPlaybackId(group.videoUrl);
               const thumbnailUrl =
                 playbackId && !group.isAudioFile
-                  ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop`
+                  ? `/api/thumbnail?playbackId=${playbackId}&width=320&height=180&fit_mode=crop`
                   : null;
               const isCollapsed = collapsed.has(group.theirstoryId);
 

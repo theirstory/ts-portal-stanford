@@ -322,7 +322,7 @@ export function GroupedSourcesView({
         const playbackId = getMuxPlaybackId(group.videoUrl);
         const thumbnailUrl =
           playbackId && !group.isAudioFile
-            ? `https://image.mux.com/${playbackId}/thumbnail.jpg?width=320&height=180&fit_mode=crop`
+            ? `/api/thumbnail?playbackId=${playbackId}&width=320&height=180&fit_mode=crop`
             : null;
         const hasContent = group.chapters.length > 0 || group.ungroupedClips.length > 0;
         if (!hasContent) return null;

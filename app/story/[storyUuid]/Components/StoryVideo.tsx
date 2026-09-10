@@ -10,6 +10,8 @@ import { throttle } from 'lodash';
 import { colors, theme } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
+import { getMuxPlaybackId } from '@/app/utils/converters';
+import { config } from '@/config/organizationConfig';
 
 export const StoryVideo = () => {
   const { storyHubPage } = useSemanticSearchStore();
@@ -18,6 +20,17 @@ export const StoryVideo = () => {
   const videoRef = useRef<MuxPlayerElement>(null);
   const videoSrc = storyHubPage?.properties.video_url;
   const isAudioFile = storyHubPage?.properties.isAudioFile || false;
+  // Mux posters default to frame 0, which is black on interviews that open on a
+  // blank screen, so let /api/thumbnail choose a frame with picture in it.
+  const playbackId = getMuxPlaybackId(videoSrc ?? null);
+  const posterDuration = Math.floor(storyHubPage?.properties.interview_duration ?? 0);
+  const pinnedPosterTime = storyHubPage?.uuid ? config.ui?.thumbnailTimes?.[storyHubPage.uuid] : undefined;
+  const posterHint = pinnedPosterTime
+    ? `&time=${Math.floor(pinnedPosterTime)}`
+    : posterDuration
+      ? `&duration=${posterDuration}`
+      : '';
+  const posterUrl = !isAudioFile && playbackId ? `/api/thumbnail?playbackId=${playbackId}&width=1280${posterHint}` : undefined;
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
   // Throttle the setCurrentTime to avoid performance issues
@@ -83,6 +96,7 @@ export const StoryVideo = () => {
           autoPlay={isMobile} // this is important because will break the word highlighting if the user has to manually start the video on mobile
           ref={videoRef}
           src={videoSrc}
+          poster={posterUrl}
           audio={isAudioFile}
           onPlay={() => {
             setIsPlaying(true);

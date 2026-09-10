@@ -50,3 +50,4 @@ tsconfig.tsbuildinfo
 .yarn/install-state.gz
 .yarn/build-state.yml
 .pnp.*.env.cloud
+.entity-cache/

@@ -10,9 +10,15 @@ pydantic
 
 # NLP
 gliner-spacy
+# GLiNER's mdeberta-v3 backbone requires transformers 4.x: transformers>=5 misparses its
+# SentencePiece spm.model as a tiktoken file and fails to build the tokenizer.
+transformers>=4.38,<5
+# Required by transformers 4.x to convert the SentencePiece tokenizer to a fast tokenizer.
+protobuf
 
 # Local Embeddings
-sentence-transformers>=2.2.0
+# sentence-transformers 6.x requires transformers>=5, which breaks GLiNER (see above).
+sentence-transformers>=2.2.0,<6
 torch>=2.0.0
 
 python-dotenv==1.0.1

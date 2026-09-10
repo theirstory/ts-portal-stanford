@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { useSemanticSearchStore } from '@/app/stores/useSemanticSearchStore';
@@ -14,6 +14,7 @@ import { SearchBox } from './SearchBox';
 import { ActiveFiltersDisplay } from './ActiveFiltersDisplay';
 import { Pagination } from './Pagination';
 import { NoInterviewsMessage } from './NoInterviewsMessage';
+import { FeaturedInterview, selectFeaturedStories } from './FeaturedInterview';
 import { colors } from '@/lib/theme';
 import useLayoutState from '@/app/stores/useLayout';
 
@@ -24,6 +25,14 @@ export default function CollectionLayout() {
 
   const storiesTestimonies = stories as WeaviateReturn<Testimonies, any> | null;
   const results = result?.objects || [];
+  const homeStories = storiesTestimonies?.objects ?? [];
+
+  // On the unfiltered home view the search bar and view toggle sit below the
+  // featured section, so they are rendered inside the scroll area in that case
+  // and at the top of the page in every other case (search results, loading,
+  // empty archive, or when the featured carousel is turned off in config).
+  const featuredCount = useMemo(() => selectFeaturedStories(homeStories).length, [homeStories]);
+  const showFeatured = !semanticSearchLoading && !hasSearched && featuredCount > 0;
 
   const handleViewChange = (_event: React.MouseEvent<HTMLElement>, newView: 'list' | 'grid') => {
     if (newView !== null) {
@@ -81,10 +90,14 @@ export default function CollectionLayout() {
             flexDirection: 'column',
           }}
           id="main-content-box">
-          <SearchBox viewMode={viewMode} onViewChange={handleViewChange} />
+          {!showFeatured && (
+            <>
+              <SearchBox viewMode={viewMode} onViewChange={handleViewChange} />
 
-          {/* Active Filters Display */}
-          <ActiveFiltersDisplay />
+              {/* Active Filters Display */}
+              <ActiveFiltersDisplay />
+            </>
+          )}
 
           {/* Loading State */}
           {semanticSearchLoading && (
@@ -125,6 +138,24 @@ export default function CollectionLayout() {
                       },
                     },
                   }}>
+                  {/* Lives inside the scroll area so it scrolls away rather than
+                      permanently shortening the recordings list. */}
+                  <FeaturedInterview stories={storiesTestimonies.objects} />
+
+                  {/* Sticky so the search bar and view toggle stay reachable once
+                      the featured section has scrolled out of view. */}
+                  <Box
+                    sx={{
+                      position: 'sticky',
+                      top: 0,
+                      zIndex: 3,
+                      bgcolor: colors.background.mainPage,
+                      pt: 0.5,
+                    }}>
+                    <SearchBox viewMode={viewMode} onViewChange={handleViewChange} />
+                    <ActiveFiltersDisplay />
+                  </Box>
+
                   {viewMode === 'list' ? <ListView /> : <GridView />}
                 </Box>
                 <Box sx={{ mt: { xs: 1, md: 'auto' } }}>

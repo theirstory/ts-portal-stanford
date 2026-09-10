@@ -4,7 +4,9 @@ import { colors } from './colors';
 export const muxPlayerThemeProps = {
   accentColor: colors.primary.light,
   style: {
-    '--controls-backdrop-color': colors.common.overlay,
+    // Keep the picture clear while paused/hovered: the controls have their own
+    // backgrounds, so no scrim is needed over the video.
+    '--controls-backdrop-color': 'transparent',
     '--media-control-background': colors.primary.light,
     '--media-control-hover-background': colors.primary.dark,
     '--media-control-color': colors.primary.contrastText,

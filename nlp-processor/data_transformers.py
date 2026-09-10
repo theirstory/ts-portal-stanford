@@ -18,14 +18,25 @@ def convert_api_format_to_sections(parsed_api_data: Dict[str, Any]) -> List[Dict
     transcript_data = parsed_api_data.get("transcript", {})
     story_data = parsed_api_data.get("story", {})
     indexes = story_data.get("indexes")
-    
-    # If no indexes, create a single section with all paragraphs
-    if not indexes:
-        print("[Transform] No indexes found, creating single section with all paragraphs")
+
+    # An index with no metadata produces zero sections, which would drop the whole
+    # transcript. Treat such an index as unusable and fall back to the single-section
+    # path, same as a story with no index at all.
+    usable_indexes = [index for index in (indexes or []) if index.get("metadata")]
+
+    # If no usable indexes, create a single section with all paragraphs
+    if not usable_indexes:
+        if indexes:
+            print(
+                f"[Transform] {len(indexes)} index(es) found but none contain sections, "
+                "creating single section with all paragraphs"
+            )
+        else:
+            print("[Transform] No indexes found, creating single section with all paragraphs")
         return _create_single_section(transcript_data)
-    
-    # Use the most recent index
-    most_recent_index = max(indexes, key=lambda x: x.get("updated_at", ""))
+
+    # Use the most recent usable index
+    most_recent_index = max(usable_indexes, key=lambda x: x.get("updated_at", ""))
     print(f"[Transform] Using index: {most_recent_index['title']}")
     print(f"[Transform] Last updated: {most_recent_index['updated_at']}")
     

@@ -2,6 +2,7 @@ import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { durationFormatHandler } from '@/app/utils/util';
 import { colors } from '@/lib/theme';
+import { config } from '@/config/organizationConfig';
 import { Chunks, Testimonies } from '@/types/weaviate';
 import { Box, Skeleton } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -40,14 +41,24 @@ export const VideoThumbnail = ({
     const targetWidth = 320;
     const targetHeight = Math.round(targetWidth / aspectRatio);
 
-    const gifStart = startTime || 3;
-    const gifEnd = gifStart + 2;
+    // Without an explicit startTime, let /api/thumbnail pick a frame that has
+    // picture in it - many interviews open on a black screen, so a fixed offset
+    // renders an all-black thumbnail.
+    const sizeParams = `width=${targetWidth}&height=${targetHeight}&fit_mode=crop`;
+    // A falsy startTime (including 0) means "no specific moment", matching the
+    // previous behaviour, so the picker still runs for the start of a recording.
+    // Failing that, an operator can pin the frame per recording in config.json.
+    const pinnedTime = config.ui?.thumbnailTimes?.[story.uuid];
+    const effectiveTime = startTime || pinnedTime;
+    const timeParam = effectiveTime ? `&time=${Math.floor(effectiveTime)}` : '';
+    const duration = story.properties.interview_duration;
+    const durationParam = !effectiveTime && duration ? `&duration=${Math.floor(duration)}` : '';
 
     return {
-      thumbnailUrl: `https://image.mux.com/${playbackId}/thumbnail.jpg?time=${startTime || 5}&width=${targetWidth}&height=${targetHeight}&fit_mode=crop`,
-      gifUrl: `https://image.mux.com/${playbackId}/animated.gif?start=${gifStart}&end=${gifEnd}&width=${targetWidth}&height=${targetHeight}&fps=10&fit_mode=crop`,
+      thumbnailUrl: `/api/thumbnail?playbackId=${playbackId}&${sizeParams}${timeParam}${durationParam}`,
+      gifUrl: `/api/thumbnail?playbackId=${playbackId}&kind=gif&${sizeParams}${timeParam}${durationParam}`,
     };
-  }, [aspectRatio, startTime, story.properties.video_url]);
+  }, [aspectRatio, startTime, story.uuid, story.properties.video_url, story.properties.interview_duration]);
 
   // Lazy loading with IntersectionObserver
   useEffect(() => {

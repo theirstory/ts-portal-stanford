@@ -113,6 +113,22 @@ export interface AppConfig {
     portalHeaderOverlay?: {
       enabled?: boolean;
     };
+    /**
+     * Pin a recording's thumbnail/poster to a specific second, overriding the
+     * frame /api/thumbnail would pick. Keyed by the recording's uuid, which is
+     * the last path segment of its /story/<uuid> URL.
+     */
+    thumbnailTimes?: Record<string, number>;
+    /**
+     * Featured interview carousel on the home view. `storyUuids` sets which
+     * recordings appear and in what order (uuids from /story/<uuid>); leave it
+     * empty to feature every recording.
+     */
+    featuredInterviews?: {
+      enabled?: boolean;
+      storyUuids?: string[];
+      limit?: number;
+    };
   };
   features?: FeaturesConfig;
   ner: {
