@@ -26,7 +26,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 4. Redirect to gatekeeper if not authenticated
+  // 4. API routes get a 401 rather than an HTML redirect
+  if (pathname.startsWith('/api')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // 5. Redirect to gatekeeper if not authenticated
   const url = request.nextUrl.clone();
   url.pathname = '/gatekeeper';
   // Store the original path to redirect back after login
@@ -39,11 +44,10 @@ export const config = {
   matcher: [
     /*
      * Match all request paths except for the ones starting with:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };
