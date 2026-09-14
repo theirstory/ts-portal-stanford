@@ -19,6 +19,11 @@ function buildNlpUrl(): string {
 const WEAVIATE_URL = buildWeaviateUrl();
 const NLP_URL = buildNlpUrl();
 
+// Long transcripts on small hosts can exceed the old fixed 10 minute budget.
+// The NLP service writes to Weaviate itself, so a client-side abort strands
+// work that is still running server-side. Override with NLP_TIMEOUT_MS.
+const NLP_TIMEOUT_MS = Number(process.env.NLP_TIMEOUT_MS ?? 45 * 60 * 1000);
+
 const INTERVIEWS_DIR = process.env.INTERVIEWS_DIR ?? './json/interviews';
 const RESET_WEAVIATE_DATA = process.env.RESET_WEAVIATE_DATA === 'true';
 const SKIP_IMPORTED_INTERVIEWS = process.env.SKIP_IMPORTED_INTERVIEWS !== 'false';
@@ -526,7 +531,7 @@ async function processInterviewFileThroughNlp(job: InterviewImportJob): Promise<
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(10 * 60 * 1000), // 10 minutes
+    signal: AbortSignal.timeout(NLP_TIMEOUT_MS),
   });
 
   const text = await res.text().catch(() => '');
