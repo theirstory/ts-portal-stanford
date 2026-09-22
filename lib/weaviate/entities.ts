@@ -1,6 +1,3 @@
-import { initWeaviateClient } from '@/lib/weaviate/client';
-import { Chunks } from '@/types/weaviate';
-
 /**
  * Named entities rolled up across every recording in the collection.
  *
@@ -192,6 +189,61 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
   };
 };
 
+const weaviateGraphqlUrl = (): string => {
+  const scheme = process.env.WEAVIATE_SECURE === 'true' ? 'https' : 'http';
+  const host = process.env.WEAVIATE_HOST_URL ?? 'localhost';
+  const port = process.env.WEAVIATE_PORT ?? '8080';
+  return `${scheme}://${host}:${port}/v1/graphql`;
+};
+
+type GraphqlChunk = {
+  interview_title?: string;
+  theirstory_id?: string;
+  ner_data?: NerDatum[];
+};
+
+/**
+ * Fetches one page of chunks over GraphQL.
+ *
+ * The typed gRPC client cannot serialize `ner_data` when it is named in
+ * `returnProperties` — it is an object[] and the client rejects it with
+ * "creating primitive value for ner_data: proto: invalid type". Elsewhere the
+ * app only ever reads ner_data via fetchObjectById, which returns every
+ * property and so never hits this.
+ *
+ * Dropping returnProperties would work but drags word_timestamps along for
+ * every chunk, which is most of the collection's bytes. GraphQL asks for
+ * exactly the three fields this needs.
+ */
+const fetchChunkPage = async (limit: number, offset: number): Promise<GraphqlChunk[]> => {
+  const adminKey = process.env.WEAVIATE_ADMIN_KEY;
+  const query = `{Get{Chunks(limit:${limit},offset:${offset}){interview_title theirstory_id ner_data{text label start_time}}}}`;
+
+  const response = await fetch(weaviateGraphqlUrl(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(adminKey ? { authorization: `Bearer ${adminKey}` } : {}),
+    },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Weaviate GraphQL returned HTTP ${response.status}`);
+  }
+
+  const body = (await response.json()) as {
+    data?: { Get?: { Chunks?: GraphqlChunk[] } };
+    errors?: { message?: string }[];
+  };
+
+  if (body.errors?.length) {
+    throw new Error(`Weaviate GraphQL error: ${body.errors.map((error) => error.message).join('; ')}`);
+  }
+
+  return body.data?.Get?.Chunks ?? [];
+};
+
 /**
  * Scans every chunk once and builds the aggregate in memory.
  *
@@ -200,9 +252,6 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
  * would be thousands of queries to build a browse page.
  */
 export const getEntityAggregates = async (): Promise<EntityAggregateResult> => {
-  const client = await initWeaviateClient();
-  const collection = client.collections.get<Chunks>('Chunks');
-
   const chunks: EntityChunkInput[] = [];
   let offset = 0;
   let truncated = false;
@@ -213,28 +262,21 @@ export const getEntityAggregates = async (): Promise<EntityAggregateResult> => {
       break;
     }
 
-    const response = await collection.query.fetchObjects({
-      limit: CHUNK_BATCH_SIZE,
-      offset,
-      returnProperties: ['ner_data', 'interview_title', 'theirstory_id'] as never,
-    });
+    const page = await fetchChunkPage(CHUNK_BATCH_SIZE, offset);
+    if (page.length === 0) break;
 
-    const objects = response?.objects ?? [];
-    if (objects.length === 0) break;
-
-    for (const object of objects) {
-      const properties = (object.properties ?? {}) as Partial<Chunks>;
+    for (const chunk of page) {
       chunks.push({
-        interviewTitle: String(properties.interview_title ?? ''),
+        interviewTitle: String(chunk.interview_title ?? ''),
         // theirstory_id on a chunk is its parent Testimony's uuid, which is
         // also the /story/<uuid> route param — no extra lookup needed to link.
-        storyUuid: String(properties.theirstory_id ?? ''),
-        nerData: Array.isArray(properties.ner_data) ? properties.ner_data : [],
+        storyUuid: String(chunk.theirstory_id ?? ''),
+        nerData: Array.isArray(chunk.ner_data) ? chunk.ner_data : [],
       });
     }
 
-    offset += objects.length;
-    if (objects.length < CHUNK_BATCH_SIZE) break;
+    offset += page.length;
+    if (page.length < CHUNK_BATCH_SIZE) break;
   }
 
   return aggregateEntitiesFromChunks(chunks, truncated);
