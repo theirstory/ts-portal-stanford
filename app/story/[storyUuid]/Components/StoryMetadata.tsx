@@ -8,6 +8,7 @@ import { colors } from '@/lib/theme';
 import { formatStoryDate } from '@/app/utils/util';
 import { isZoteroEnabled } from '@/config/organizationConfig';
 import { ZoteroSaveInterviewButton } from '@/components/zotero/ZoteroSaveInterviewButton';
+import { AuthorshipBadge } from '@/components/AuthorshipBadge';
 
 interface StoryMetadataProps {
   isMobile?: boolean;
@@ -80,6 +81,11 @@ export const StoryMetadata = ({ isMobile = false }: StoryMetadataProps) => {
               sx={{ display: 'block', mb: 0.5 }}>
               Summary
             </Typography>
+            {interview_description?.trim() && (
+              <Box sx={{ mb: 0.75 }}>
+                <AuthorshipBadge authorship="ai" size="small" />
+              </Box>
+            )}
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
               {interview_description?.trim() ? interview_description : 'No summary available'}
             </Typography>
@@ -162,9 +168,12 @@ export const StoryMetadata = ({ isMobile = false }: StoryMetadataProps) => {
               )}
             </Box>
             <Box>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="primary">
-                Summary
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, flexWrap: 'wrap' }}>
+                <Typography variant="subtitle2" fontWeight="bold" color="primary" sx={{ m: 0 }}>
+                  Summary
+                </Typography>
+                {interview_description?.trim() && <AuthorshipBadge authorship="ai" />}
+              </Box>
               <Typography variant="body2" color="text.secondary">
                 {interview_description?.trim() ? interview_description : 'No summary available'}
               </Typography>
