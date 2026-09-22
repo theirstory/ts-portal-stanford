@@ -36,6 +36,7 @@ export const AppTopBar = () => {
   const isChatPage = pathname.startsWith('/discover');
   const isIndexPage = pathname.startsWith('/indexes');
   const isCollectionsPage = pathname.startsWith('/collections');
+  const isEntitiesPage = pathname.startsWith('/entities');
   const isHomePage = pathname === '/';
   const isFullScreenPage = isStoryPage || isChatPage;
   const isAutoCollapsePage = isStoryPage || isChatPage || isIndexPage;
@@ -132,6 +133,7 @@ export const AppTopBar = () => {
                 }}>
                 {!isHomePage && <Link href="/">RECORDINGS</Link>}
                 {!isIndexPage && <Link href="/indexes">INDEXES</Link>}
+                {!isEntitiesPage && <Link href="/entities">ENTITIES</Link>}
                 {shouldShowCollectionsLink && !isCollectionsPage && <Link href="/collections">COLLECTIONS</Link>}
                 {!isFullScreenPage && (
                   <Tooltip title={isTopBarCollapsed ? 'Expand' : 'Collapse'}>
@@ -181,6 +183,7 @@ export const AppTopBar = () => {
                 }}>
                 <Link href="/">RECORDINGS</Link>
                 <Link href="/indexes">INDEXES</Link>
+                <Link href="/entities">ENTITIES</Link>
                 {shouldShowCollectionsLink && <Link href="/collections">COLLECTIONS</Link>}
                 {isChatEnabled && (
                   <Box

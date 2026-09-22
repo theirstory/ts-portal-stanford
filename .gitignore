@@ -51,3 +51,4 @@ tsconfig.tsbuildinfo
 .yarn/build-state.yml
 .pnp.*.env.cloud
 .entity-cache/
+exports/
