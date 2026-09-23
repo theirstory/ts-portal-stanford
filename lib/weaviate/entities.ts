@@ -16,13 +16,29 @@
 const CHUNK_BATCH_SIZE = 500;
 const MAX_CHUNKS = 50_000;
 
+export type EntityOccurrence = {
+  /** Seconds into the recording. */
+  start: number;
+  end?: number;
+  /** The surface form actually spoken at this moment. */
+  text: string;
+};
+
 export type EntityStoryRef = {
   storyUuid: string;
   interviewTitle: string;
   mentions: number;
   /** Earliest mention in that recording, for a deep link into the player. */
   firstStartTime?: number;
+  /**
+   * Every mention in this recording, earliest first, so a reader can jump
+   * between them. Capped — a name repeated hundreds of times in one interview
+   * is navigated by scrubbing, not by a list that long.
+   */
+  occurrences: EntityOccurrence[];
 };
+
+const MAX_OCCURRENCES_PER_STORY = 200;
 
 export type EntityVariant = {
   text: string;
@@ -49,7 +65,7 @@ export type EntityAggregateResult = {
   truncated: boolean;
 };
 
-type NerDatum = { text?: unknown; label?: unknown; start_time?: unknown };
+type NerDatum = { text?: unknown; label?: unknown; start_time?: unknown; end_time?: unknown };
 
 export const normalizeEntityKey = (value: string): string =>
   value
@@ -98,7 +114,10 @@ type GroupAccumulator = {
   label: string;
   mentions: number;
   variants: Map<string, number>;
-  stories: Map<string, { interviewTitle: string; mentions: number; firstStartTime?: number }>;
+  stories: Map<
+    string,
+    { interviewTitle: string; mentions: number; firstStartTime?: number; occurrences: EntityOccurrence[] }
+  >;
 };
 
 /** One chunk's worth of input to the aggregate. */
@@ -120,7 +139,11 @@ const toAggregate = (group: GroupAccumulator): EntityAggregate => {
     mentions: group.mentions,
     variants,
     stories: Array.from(group.stories.entries())
-      .map(([storyUuid, story]) => ({ storyUuid, ...story }))
+      .map(([storyUuid, story]) => ({
+        storyUuid,
+        ...story,
+        occurrences: [...story.occurrences].sort((a, b) => a.start - b.start),
+      }))
       .sort((a, b) => b.mentions - a.mentions),
   };
 };
@@ -156,17 +179,26 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
       group.variants.set(text, (group.variants.get(text) ?? 0) + 1);
 
       const startTime = Number(datum?.start_time);
+      const endTime = Number(datum?.end_time);
+      const occurrence: EntityOccurrence | null = Number.isFinite(startTime)
+        ? { start: startTime, ...(Number.isFinite(endTime) ? { end: endTime } : {}), text }
+        : null;
+
       const story = group.stories.get(chunk.storyUuid);
       if (story) {
         story.mentions += 1;
         if (Number.isFinite(startTime) && (story.firstStartTime === undefined || startTime < story.firstStartTime)) {
           story.firstStartTime = startTime;
         }
+        if (occurrence && story.occurrences.length < MAX_OCCURRENCES_PER_STORY) {
+          story.occurrences.push(occurrence);
+        }
       } else {
         group.stories.set(chunk.storyUuid, {
           interviewTitle: chunk.interviewTitle,
           mentions: 1,
           firstStartTime: Number.isFinite(startTime) ? startTime : undefined,
+          occurrences: occurrence ? [occurrence] : [],
         });
       }
     }
@@ -191,8 +223,15 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
 
 const weaviateGraphqlUrl = (): string => {
   const scheme = process.env.WEAVIATE_SECURE === 'true' ? 'https' : 'http';
-  const host = process.env.WEAVIATE_HOST_URL ?? 'localhost';
+  const configured = process.env.WEAVIATE_HOST_URL ?? 'localhost';
   const port = process.env.WEAVIATE_PORT ?? '8080';
+
+  // Node's fetch resolves `localhost` to ::1 first and does not fall back to
+  // IPv4, so it fails against a Weaviate bound only to 127.0.0.1 — which is
+  // what docker-compose port publishing and SSH tunnels both give you. The
+  // gRPC client is unaffected, so this only shows up on the REST path.
+  const host = configured === 'localhost' ? '127.0.0.1' : configured;
+
   return `${scheme}://${host}:${port}/v1/graphql`;
 };
 
@@ -217,7 +256,7 @@ type GraphqlChunk = {
  */
 const fetchChunkPage = async (limit: number, offset: number): Promise<GraphqlChunk[]> => {
   const adminKey = process.env.WEAVIATE_ADMIN_KEY;
-  const query = `{Get{Chunks(limit:${limit},offset:${offset}){interview_title theirstory_id ner_data{text label start_time}}}}`;
+  const query = `{Get{Chunks(limit:${limit},offset:${offset}){interview_title theirstory_id ner_data{text label start_time end_time}}}}`;
 
   const response = await fetch(weaviateGraphqlUrl(), {
     method: 'POST',
