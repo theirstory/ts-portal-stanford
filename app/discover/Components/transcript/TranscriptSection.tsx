@@ -4,7 +4,8 @@ import { Accordion, AccordionDetails, AccordionSummary, Box, Typography } from '
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { colors } from '@/lib/theme';
 import { Section, Word } from '@/types/transcription';
-import { SearchMode, ThematicMatch } from './transcriptTypes';
+import { NerHighlight, SearchMode, ThematicMatch } from './transcriptTypes';
+import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 
 function formatTimestamp(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -77,6 +78,8 @@ export function TranscriptSection({
   isExpanded,
   onToggle,
   onWordClick,
+  nerHighlights,
+  activeNerStart,
 }: {
   section: Section;
   sectionIndex: number;
@@ -91,6 +94,9 @@ export function TranscriptSection({
   isExpanded: boolean;
   onToggle: () => void;
   onWordClick: (time: number) => void;
+  /** Entity mentions to mark, when the reader arrived from an entity view. */
+  nerHighlights?: NerHighlight[];
+  activeNerStart?: number;
 }) {
   const searchLower = searchMode === 'text' ? searchTerm.toLowerCase() : '';
 
@@ -144,6 +150,23 @@ export function TranscriptSection({
                 const matchKey = isSearchMatch ? `${sectionIndex}-${pIdx}-${wIdx}` : undefined;
                 const isActiveMatch = matchKey !== undefined && matchKey === activeMatchKey;
 
+                // An entity mention can span several words; the label chip is
+                // emitted once, after its last word.
+                const nerMatch = nerHighlights?.find(
+                  (highlight) => word.start >= highlight.startTime - 0.35 && word.start <= highlight.endTime + 0.35,
+                );
+                const isLastNerWord =
+                  nerMatch !== undefined &&
+                  !(
+                    para.words[wIdx + 1] &&
+                    para.words[wIdx + 1].start >= nerMatch.startTime - 0.35 &&
+                    para.words[wIdx + 1].start <= nerMatch.endTime + 0.35
+                  );
+                const isActiveNer =
+                  nerMatch !== undefined &&
+                  activeNerStart !== undefined &&
+                  Math.abs(nerMatch.startTime - activeNerStart) < 0.35;
+
                 let isThematicHighlight = false;
                 let isActiveThematicMatch = false;
                 let thematicMatchKey: string | undefined;
@@ -164,7 +187,7 @@ export function TranscriptSection({
                   }
                 }
 
-                return (
+                const rendered = (
                   <TranscriptWord
                     key={wIdx}
                     word={word}
@@ -177,6 +200,43 @@ export function TranscriptSection({
                     matchKey={matchKey ?? thematicMatchKey}
                     onClick={() => onWordClick(word.start)}
                   />
+                );
+
+                if (!nerMatch) return rendered;
+
+                const nerColor = getNerColor(nerMatch.label);
+
+                return (
+                  <Box
+                    key={wIdx}
+                    component="span"
+                    data-ner-start={nerMatch.startTime}
+                    data-active-ner={isActiveNer ? 'true' : undefined}
+                    sx={{
+                      backgroundColor: nerColor,
+                      borderRadius: '3px',
+                      px: '1px',
+                      fontWeight: 600,
+                      boxShadow: isActiveNer ? `0 0 0 2px ${colors.primary.main}` : 'none',
+                    }}>
+                    {rendered}
+                    {isLastNerWord && (
+                      <Box
+                        component="span"
+                        sx={{
+                          ml: 0.5,
+                          px: 0.5,
+                          fontSize: '0.62rem',
+                          fontWeight: 700,
+                          letterSpacing: '0.04em',
+                          textTransform: 'uppercase',
+                          color: colors.text.secondary,
+                          verticalAlign: 'middle',
+                        }}>
+                        {getNerDisplayName(nerMatch.label)}
+                      </Box>
+                    )}
+                  </Box>
                 );
               })}
             </Typography>

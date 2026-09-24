@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -11,18 +11,15 @@ import Chip from '@mui/material/Chip';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import MuxPlayer from '@mux/mux-player-react';
-import type MuxPlayerElement from '@mux/mux-player';
 import Link from 'next/link';
 
 import { colors } from '@/lib/theme';
-import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 import { getEntityOccurrences } from '@/lib/weaviate/search';
 import type { EntityCollectionOccurrences } from '@/lib/weaviate/entities';
-import { EntityTranscriptView } from '@/components/EntityTranscriptView';
+import { SidePanelTranscriptView } from '@/app/discover/Components/SidePanelTranscriptView';
+import type { Citation } from '@/types/chat';
 
 /** Characters of surrounding passage shown before "Show more". */
 const EXCERPT_RADIUS = 90;
@@ -101,7 +98,6 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   /** Recording opened for playback inside the panel, with the moment to seek to. */
   const [playing, setPlaying] = useState<{ storyUuid: string; start: number } | null>(null);
-  const playerRef = useRef<MuxPlayerElement>(null);
 
   const variantKey = target.variants.join('|');
 
@@ -136,14 +132,6 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
     };
   }, [target.text, target.label, target.focusStoryUuid, variantKey]);
 
-  // Selecting another moment in the same recording seeks the open player
-  // rather than remounting it, so playback is not interrupted.
-  useEffect(() => {
-    if (playing && playerRef.current) {
-      playerRef.current.currentTime = playing.start;
-    }
-  }, [playing]);
-
   const recordings = useMemo(() => {
     if (!data) return [];
     const needle = filter.trim().toLowerCase();
@@ -174,6 +162,24 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
   const playingRecording = playing
     ? (data?.recordings.find((recording) => recording.storyUuid === playing.storyUuid) ?? null)
     : null;
+
+  // The transcript view is citation-driven; an entity mention is expressed as
+  // one so the same component serves both entry points.
+  const transcriptCitation =
+    playing && playingRecording
+      ? {
+          index: 0,
+          transcription: '',
+          speaker: '',
+          interviewTitle: playingRecording.interviewTitle,
+          sectionTitle: '',
+          startTime: playing.start,
+          endTime: playing.start,
+          theirstoryId: playingRecording.storyUuid,
+          videoUrl: playingRecording.videoUrl,
+          isAudioFile: playingRecording.isAudioFile,
+        }
+      : null;
 
   const labelColor = getNerColor(target.label);
 
@@ -218,62 +224,17 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
       )}
 
       {data && playing && playingRecording && (
-        <Box sx={{ flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.75 }}>
-            <IconButton size="small" onClick={() => setPlaying(null)} aria-label="Back to all mentions">
-              <ArrowBackIcon fontSize="small" />
-            </IconButton>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography sx={{ fontSize: 13.5, fontWeight: 600 }} noWrap>
-                {playingRecording.interviewTitle}
-              </Typography>
-              <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>Back to all mentions</Typography>
-            </Box>
-            <Box sx={{ flexGrow: 1 }} />
-            <Link
-              href={`/story/${playingRecording.storyUuid}?start=${Math.floor(playing.start)}&nerLabel=${encodeURIComponent(target.label)}`}
-              style={{ fontSize: 12, color: colors.primary.main, fontWeight: 600, whiteSpace: 'nowrap' }}>
-              Open recording
-            </Link>
-          </Box>
-          <MuxPlayer
-            ref={playerRef}
-            src={playingRecording.videoUrl}
-            audio={playingRecording.isAudioFile}
-            startTime={playing.start}
-            forwardSeekOffset={10}
-            backwardSeekOffset={10}
-            accentColor={muxPlayerThemeProps.accentColor}
-            // Mux shows the default track unless captions are hidden explicitly.
-            defaultHiddenCaptions={false}
-            style={{
-              ...muxPlayerThemeProps.style,
-              width: '100%',
-              aspectRatio: playingRecording.isAudioFile ? 'auto' : '16/9',
-            }}>
-            {/*
-              The Mux assets carry no caption track, so this supplies one built
-              from the transcript we already hold. Slotted into the player so it
-              appears under the usual CC control.
-            */}
-            <track
-              kind="captions"
-              label="English"
-              srcLang="en"
-              default
-              src={`/api/captions?storyId=${encodeURIComponent(playingRecording.storyUuid)}`}
-            />
-          </MuxPlayer>
-        </Box>
-      )}
-
-      {data && playing && playingRecording && (
-        <EntityTranscriptView
-          storyUuid={playingRecording.storyUuid}
-          entityLabel={target.label}
-          occurrences={playingRecording.occurrences}
-          activeStart={playing.start}
-          onSelectOccurrence={(start) => setPlaying({ storyUuid: playingRecording.storyUuid, start })}
+        <SidePanelTranscriptView
+          citation={transcriptCitation as Citation}
+          backLabel="Back to all mentions"
+          onBack={() => setPlaying(null)}
+          nerHighlights={playingRecording.occurrences.map((occurrence) => ({
+            startTime: occurrence.start,
+            endTime: occurrence.end ?? occurrence.start,
+            text: occurrence.text,
+            label: target.label,
+          }))}
+          activeNerStart={playing.start}
         />
       )}
 

@@ -1,16 +1,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  Box,
-  Button,
-  IconButton,
-  Tooltip,
-  Typography,
-  CircularProgress,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
+import { Box, Button, IconButton, Tooltip, Typography, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MuxPlayer from '@mux/mux-player-react';
@@ -22,7 +13,8 @@ import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { TextSelectionPopover } from './TextSelectionPopover';
 import { TranscriptSection } from './transcript/TranscriptSection';
 import { TranscriptSearchBar } from './transcript/TranscriptSearchBar';
-import { SearchMode, ThematicMatch, TranscriptData } from './transcript/transcriptTypes';
+import { NerHighlight, SearchMode, ThematicMatch, TranscriptData } from './transcript/transcriptTypes';
+import type { Citation } from '@/types/chat';
 
 /** Merge overlapping / near-adjacent thematic matches so researchers see distinct passages. */
 function mergeThematicMatches(matches: ThematicMatch[], gapSeconds = 2): ThematicMatch[] {
@@ -56,14 +48,37 @@ function formatTimestamp(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export const SidePanelTranscriptView = () => {
+/**
+ * Optional props let this view be used outside the chat panel — the entity map
+ * opens it for a recording with no citation behind it. Everything defaults to
+ * the chat store, so /discover is unchanged.
+ */
+export type SidePanelTranscriptViewProps = {
+  citation?: Citation;
+  backLabel?: string;
+  onBack?: () => void;
+  /** Entity mentions to mark and step through. */
+  nerHighlights?: NerHighlight[];
+  activeNerStart?: number;
+  onActiveNerChange?: (startTime: number) => void;
+};
+
+export const SidePanelTranscriptView = ({
+  citation,
+  backLabel: backLabelProp,
+  onBack,
+  nerHighlights,
+  activeNerStart,
+  onActiveNerChange,
+}: SidePanelTranscriptViewProps = {}) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const transcriptCitation = useChatStore((s) => s.transcriptCitation);
+  const storeCitation = useChatStore((s) => s.transcriptCitation);
   const previousMode = useChatStore((s) => s.previousMode);
   const storeGoBack = useChatStore((s) => s.goBack);
   const { onGoBack } = useChatInteraction();
-  const goBack = onGoBack ?? storeGoBack;
+  const transcriptCitation = citation ?? storeCitation;
+  const goBack = onBack ?? onGoBack ?? storeGoBack;
 
   const [data, setData] = useState<TranscriptData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -338,7 +353,7 @@ export const SidePanelTranscriptView = () => {
 
   if (!transcriptCitation) return null;
 
-  const backLabel = previousMode === 'search' ? 'Back to results' : 'Back to source';
+  const backLabel = backLabelProp ?? (previousMode === 'search' ? 'Back to results' : 'Back to source');
   const hasResults = totalMatches > 0;
   const showMatchNavigation = !!searchTerm.trim() && hasResults;
   const placeholder =
@@ -481,6 +496,8 @@ export const SidePanelTranscriptView = () => {
                 isExpanded={expandedSections.has(idx)}
                 onToggle={() => toggleSection(idx)}
                 onWordClick={handleWordClick}
+                nerHighlights={nerHighlights}
+                activeNerStart={activeNerStart}
               />
             ))}
           </Box>
