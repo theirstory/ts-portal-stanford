@@ -347,7 +347,9 @@ export const getEntityAggregates = async (): Promise<EntityAggregateResult> => {
 export type EntityRecordingOccurrences = {
   storyUuid: string;
   interviewTitle: string;
-  occurrences: (EntityOccurrence & { speaker: string; context: string })[];
+  videoUrl: string;
+  isAudioFile: boolean;
+  occurrences: (EntityOccurrence & { speaker: string; context: string; sectionTitle: string })[];
 };
 
 export type EntityCollectionOccurrences = {
@@ -390,13 +392,19 @@ export const getEntityOccurrencesAcrossCollection = async (
 
   const data = await runWeaviateGraphql<{
     Get?: {
-      Chunks?: (GraphqlChunk & { transcription?: string; speaker?: string })[];
+      Chunks?: (GraphqlChunk & {
+        transcription?: string;
+        speaker?: string;
+        section_title?: string;
+        video_url?: string;
+        isAudioFile?: boolean;
+      })[];
     };
   }>(
     `{Get{Chunks(limit:10000,where:{operator:And,operands:[` +
       `{path:["ner_text"],operator:ContainsAny,valueText:[${forms.map(graphqlString).join(',')}]},` +
       `{path:["ner_labels"],operator:ContainsAny,valueText:[${graphqlString(entityLabel)}]}` +
-      `]}){interview_title theirstory_id speaker transcription ner_data{text label start_time end_time}}}}`,
+      `]}){interview_title theirstory_id speaker transcription section_title video_url isAudioFile ner_data{text label start_time end_time}}}}`,
   );
 
   const byRecording = new Map<string, EntityRecordingOccurrences>();
@@ -424,6 +432,8 @@ export const getEntityOccurrencesAcrossCollection = async (
         recording = {
           storyUuid,
           interviewTitle: String(chunk.interview_title ?? 'Unknown recording'),
+          videoUrl: String(chunk.video_url ?? ''),
+          isAudioFile: Boolean(chunk.isAudioFile),
           occurrences: [],
         };
         byRecording.set(storyUuid, recording);
@@ -435,6 +445,7 @@ export const getEntityOccurrencesAcrossCollection = async (
         ...(Number.isFinite(end) ? { end } : {}),
         text,
         speaker: String(chunk.speaker ?? ''),
+        sectionTitle: String(chunk.section_title ?? ''),
         // The passage that carries this moment, for context around the name.
         context: String(chunk.transcription ?? ''),
       });

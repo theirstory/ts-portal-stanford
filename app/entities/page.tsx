@@ -21,7 +21,7 @@ import Link from 'next/link';
 import { colors } from '@/lib/theme';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 import type { EntityAggregate, EntityAggregateResult } from '@/lib/weaviate/entities';
-import { NerEntityModal } from '@/app/story/[storyUuid]/Components/NerEntityModal';
+import { EntityDetailPanel, type EntityDetailTarget } from '@/components/EntityDetailPanel';
 
 /** Columns shown when drilling into one category, before "show all". */
 const DEFAULT_COLUMN_LIMIT = 30;
@@ -267,420 +267,443 @@ export default function EntitiesPage() {
   const hue = category ? getNerColor(category) : colors.primary.main;
 
   return (
-    <Box sx={{ px: { xs: 2, sm: 3 }, py: { xs: 3, sm: 4 }, maxWidth: 1400, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 0.5 }}>
-        {category !== null && (
-          <IconButton
-            size="small"
-            aria-label="Back to all categories"
-            onClick={() => {
-              setCategory(null);
-              setFilter('');
-              setShowAllColumns(false);
-              setSort(null);
-              setColumnSort(null);
-            }}
-            sx={{ mt: 0.25 }}>
-            <ArrowBackIcon fontSize="small" />
-          </IconButton>
-        )}
-        <Box>
-          <Typography component="h1" sx={{ fontSize: { xs: 22, sm: 28 }, fontWeight: 700, lineHeight: 1.15 }}>
-            {category === null ? 'Who and what the collection talks about' : getNerDisplayName(category)}
-          </Typography>
-          <Typography sx={{ color: colors.text.secondary, fontSize: 14.5, mt: 0.5, maxWidth: '68ch' }}>
-            {category === null
-              ? 'Each column is a kind of thing the interviews mention; each row is a recording. Darker means more mentions. Pick a column to see the individual names inside it.'
-              : `Each column is one ${getNerDisplayName(category).toLowerCase().replace(/s$/, '')} mentioned in the collection. Select a square to see every time it is spoken in that recording.`}
-          </Typography>
-        </Box>
-      </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mt: 3 }}>
-          {error}
-        </Alert>
-      )}
-
-      {!data && !error && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 6, color: colors.text.secondary }}>
-          <CircularProgress size={18} />
-          <Typography sx={{ fontSize: 14 }}>Building the index across all recordings…</Typography>
-        </Box>
-      )}
-
-      {data && (
-        <>
-          <Box
-            sx={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: { xs: 1.5, sm: 2.5 },
-              mt: 2.5,
-              mb: 1.5,
-            }}>
-            {category !== null && (
-              <TextField
-                size="small"
-                id="entity-column-filter"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-                placeholder={`Filter ${getNerDisplayName(category).toLowerCase()}…`}
-                sx={{ minWidth: 220 }}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon sx={{ fontSize: 18, color: colors.text.secondary }} />
-                    </InputAdornment>
-                  ),
-                }}
-              />
-            )}
-
-            <FormControlLabel
-              control={
-                <Switch
-                  id="entity-show-counts"
-                  size="small"
-                  checked={showCounts}
-                  onChange={(event) => setShowCounts(event.target.checked)}
-                />
-              }
-              label={<Typography sx={{ fontSize: 13.5 }}>Show counts</Typography>}
-            />
-
-            <Typography sx={{ fontSize: 13, color: colors.text.secondary, fontVariantNumeric: 'tabular-nums' }}>
+    <Box sx={{ display: 'flex', alignItems: 'stretch', minHeight: 0 }}>
+      <Box
+        sx={{
+          flex: 1,
+          minWidth: 0,
+          px: { xs: 2, sm: 3 },
+          py: { xs: 3, sm: 4 },
+          maxWidth: 1400,
+          mx: 'auto',
+        }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 0.5 }}>
+          {category !== null && (
+            <IconButton
+              size="small"
+              aria-label="Back to all categories"
+              onClick={() => {
+                setCategory(null);
+                setFilter('');
+                setShowAllColumns(false);
+                setSort(null);
+                setColumnSort(null);
+              }}
+              sx={{ mt: 0.25 }}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
+          <Box>
+            <Typography component="h1" sx={{ fontSize: { xs: 22, sm: 28 }, fontWeight: 700, lineHeight: 1.15 }}>
+              {category === null ? 'Who and what the collection talks about' : getNerDisplayName(category)}
+            </Typography>
+            <Typography sx={{ color: colors.text.secondary, fontSize: 14.5, mt: 0.5, maxWidth: '68ch' }}>
               {category === null
-                ? `${data.entities.length.toLocaleString()} distinct entities · ${data.totalMentions.toLocaleString()} mentions · ${rows.length} recordings`
-                : `${columns.length} of ${categoryTotal.toLocaleString()} shown`}
+                ? 'Each column is a kind of thing the interviews mention; each row is a recording. Darker means more mentions. Pick a column to see the individual names inside it.'
+                : `Each column is one ${getNerDisplayName(category).toLowerCase().replace(/s$/, '')} mentioned in the collection. Select a square to see every time it is spoken in that recording.`}
             </Typography>
-
-            {category !== null && !showAllColumns && categoryTotal > columns.length && (
-              <Typography
-                component="button"
-                onClick={() => setShowAllColumns(true)}
-                sx={{
-                  fontSize: 13,
-                  color: colors.primary.main,
-                  background: 'none',
-                  border: 'none',
-                  p: 0,
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  font: 'inherit',
-                }}>
-                Show all
-              </Typography>
-            )}
           </Box>
+        </Box>
 
-          {columns.length === 0 ? (
-            <Typography sx={{ py: 5, color: colors.text.secondary, fontSize: 14 }}>
-              Nothing matches that filter.
-            </Typography>
-          ) : (
+        {error && (
+          <Alert severity="error" sx={{ mt: 3 }}>
+            {error}
+          </Alert>
+        )}
+
+        {!data && !error && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 6, color: colors.text.secondary }}>
+            <CircularProgress size={18} />
+            <Typography sx={{ fontSize: 14 }}>Building the index across all recordings…</Typography>
+          </Box>
+        )}
+
+        {data && (
+          <>
             <Box
               sx={{
-                overflowX: 'auto',
-                border: `1px solid ${colors.common.border}`,
-                borderRadius: 1,
-                backgroundColor: colors.background.paper,
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                gap: { xs: 1.5, sm: 2.5 },
+                mt: 2.5,
+                mb: 1.5,
               }}>
-              <Box component="table" sx={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 'max-content' }}>
-                <Box component="thead">
-                  <Box component="tr">
-                    <Box
-                      component="th"
-                      sx={{
-                        position: 'sticky',
-                        left: 0,
-                        zIndex: 3,
-                        backgroundColor: colors.background.paper,
-                        borderBottom: `1px solid ${colors.common.border}`,
-                        borderRight: `1px solid ${colors.common.border}`,
-                        width: ROW_LABEL_WIDTH,
-                        minWidth: ROW_LABEL_WIDTH,
-                      }}
-                    />
-                    {columns.map((column) => (
+              {category !== null && (
+                <TextField
+                  size="small"
+                  id="entity-column-filter"
+                  value={filter}
+                  onChange={(event) => setFilter(event.target.value)}
+                  placeholder={`Filter ${getNerDisplayName(category).toLowerCase()}…`}
+                  sx={{ minWidth: 220 }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ fontSize: 18, color: colors.text.secondary }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              )}
+
+              <FormControlLabel
+                control={
+                  <Switch
+                    id="entity-show-counts"
+                    size="small"
+                    checked={showCounts}
+                    onChange={(event) => setShowCounts(event.target.checked)}
+                  />
+                }
+                label={<Typography sx={{ fontSize: 13.5 }}>Show counts</Typography>}
+              />
+
+              <Typography sx={{ fontSize: 13, color: colors.text.secondary, fontVariantNumeric: 'tabular-nums' }}>
+                {category === null
+                  ? `${data.entities.length.toLocaleString()} distinct entities · ${data.totalMentions.toLocaleString()} mentions · ${rows.length} recordings`
+                  : `${columns.length} of ${categoryTotal.toLocaleString()} shown`}
+              </Typography>
+
+              {category !== null && !showAllColumns && categoryTotal > columns.length && (
+                <Typography
+                  component="button"
+                  onClick={() => setShowAllColumns(true)}
+                  sx={{
+                    fontSize: 13,
+                    color: colors.primary.main,
+                    background: 'none',
+                    border: 'none',
+                    p: 0,
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    font: 'inherit',
+                  }}>
+                  Show all
+                </Typography>
+              )}
+            </Box>
+
+            {columns.length === 0 ? (
+              <Typography sx={{ py: 5, color: colors.text.secondary, fontSize: 14 }}>
+                Nothing matches that filter.
+              </Typography>
+            ) : (
+              <Box
+                sx={{
+                  overflowX: 'auto',
+                  border: `1px solid ${colors.common.border}`,
+                  borderRadius: 1,
+                  backgroundColor: colors.background.paper,
+                }}>
+                <Box component="table" sx={{ borderCollapse: 'separate', borderSpacing: 0, minWidth: 'max-content' }}>
+                  <Box component="thead">
+                    <Box component="tr">
                       <Box
                         component="th"
-                        key={column.key}
-                        scope="col"
                         sx={{
-                          p: 0,
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 3,
+                          backgroundColor: colors.background.paper,
                           borderBottom: `1px solid ${colors.common.border}`,
-                          verticalAlign: 'bottom',
-                          width: CELL_WIDTH,
-                          minWidth: CELL_WIDTH,
-                        }}>
-                        <Tooltip title={category === null ? `See every ${column.label.toLowerCase()}` : column.label}>
-                          <Box
-                            component={category === null ? 'button' : 'div'}
-                            type={category === null ? 'button' : undefined}
-                            onClick={
-                              category === null
-                                ? () => {
-                                    setCategory(column.nerLabel);
-                                    setShowAllColumns(false);
-                                    setFilter('');
-                                    setSort(null);
-                                    setColumnSort(null);
-                                  }
-                                : undefined
-                            }
-                            sx={{
-                              height: 150,
-                              width: '100%',
-                              display: 'flex',
-                              alignItems: 'flex-end',
-                              justifyContent: 'center',
-                              pb: 1,
-                              background: 'none',
-                              border: 'none',
-                              font: 'inherit',
-                              color: 'inherit',
-                              cursor: category === null ? 'pointer' : 'default',
-                              '&:hover': category === null ? { backgroundColor: colors.background.subtle } : {},
-                            }}>
-                            <Typography
+                          borderRight: `1px solid ${colors.common.border}`,
+                          width: ROW_LABEL_WIDTH,
+                          minWidth: ROW_LABEL_WIDTH,
+                        }}
+                      />
+                      {columns.map((column) => (
+                        <Box
+                          component="th"
+                          key={column.key}
+                          scope="col"
+                          sx={{
+                            p: 0,
+                            borderBottom: `1px solid ${colors.common.border}`,
+                            verticalAlign: 'bottom',
+                            width: CELL_WIDTH,
+                            minWidth: CELL_WIDTH,
+                          }}>
+                          <Tooltip title={category === null ? `See every ${column.label.toLowerCase()}` : column.label}>
+                            <Box
+                              component={category === null ? 'button' : 'div'}
+                              type={category === null ? 'button' : undefined}
+                              onClick={
+                                category === null
+                                  ? () => {
+                                      setCategory(column.nerLabel);
+                                      setShowAllColumns(false);
+                                      setFilter('');
+                                      setSort(null);
+                                      setColumnSort(null);
+                                    }
+                                  : undefined
+                              }
                               sx={{
-                                writingMode: 'vertical-rl',
-                                transform: 'rotate(180deg)',
-                                fontSize: 12.5,
-                                fontWeight: category === null ? 600 : 500,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                maxHeight: 138,
-                                borderLeft: `3px solid ${getNerColor(column.nerLabel)}`,
-                                pl: 0.75,
+                                height: 150,
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'flex-end',
+                                justifyContent: 'center',
+                                pb: 1,
+                                background: 'none',
+                                border: 'none',
+                                font: 'inherit',
+                                color: 'inherit',
+                                cursor: category === null ? 'pointer' : 'default',
+                                '&:hover': category === null ? { backgroundColor: colors.background.subtle } : {},
                               }}>
-                              {column.label}
-                            </Typography>
-                          </Box>
-                        </Tooltip>
+                              <Typography
+                                sx={{
+                                  writingMode: 'vertical-rl',
+                                  transform: 'rotate(180deg)',
+                                  fontSize: 12.5,
+                                  fontWeight: category === null ? 600 : 500,
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  maxHeight: 138,
+                                  borderLeft: `3px solid ${getNerColor(column.nerLabel)}`,
+                                  pl: 0.75,
+                                }}>
+                                {column.label}
+                              </Typography>
+                            </Box>
+                          </Tooltip>
+                        </Box>
+                      ))}
+                    </Box>
+
+                    <Box component="tr">
+                      <Box
+                        component="th"
+                        sx={{
+                          position: 'sticky',
+                          left: 0,
+                          zIndex: 3,
+                          backgroundColor: colors.background.paper,
+                          borderBottom: `1px solid ${colors.common.border}`,
+                          borderRight: `1px solid ${colors.common.border}`,
+                          textAlign: 'right',
+                          pr: 1.5,
+                          py: 0.25,
+                        }}>
+                        <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>
+                          {sort ? 'sorted' : 'sort'}
+                        </Typography>
                       </Box>
-                    ))}
+                      {columns.map((column) => {
+                        const active = sort?.columnKey === column.key;
+                        const Icon = !active
+                          ? SwapVertIcon
+                          : sort?.direction === 'desc'
+                            ? ArrowDownwardIcon
+                            : ArrowUpwardIcon;
+
+                        return (
+                          <Box
+                            component="th"
+                            key={`sort-${column.key}`}
+                            sx={{ p: 0, borderBottom: `1px solid ${colors.common.border}` }}>
+                            <Tooltip
+                              title={
+                                active && sort?.direction === 'desc'
+                                  ? `Sort recordings by fewest ${column.label}`
+                                  : active
+                                    ? 'Clear sorting'
+                                    : `Sort recordings by most ${column.label}`
+                              }>
+                              <Box
+                                component="button"
+                                type="button"
+                                onClick={() => toggleSort(column.key)}
+                                aria-label={`Sort recordings by ${column.label}`}
+                                sx={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  py: 0.4,
+                                  background: 'none',
+                                  border: 'none',
+                                  cursor: 'pointer',
+                                  color: active ? colors.primary.main : colors.text.secondary,
+                                  '&:hover': { backgroundColor: colors.background.subtle },
+                                }}>
+                                <Icon sx={{ fontSize: 15 }} />
+                              </Box>
+                            </Tooltip>
+                          </Box>
+                        );
+                      })}
+                    </Box>
                   </Box>
 
-                  <Box component="tr">
-                    <Box
-                      component="th"
-                      sx={{
-                        position: 'sticky',
-                        left: 0,
-                        zIndex: 3,
-                        backgroundColor: colors.background.paper,
-                        borderBottom: `1px solid ${colors.common.border}`,
-                        borderRight: `1px solid ${colors.common.border}`,
-                        textAlign: 'right',
-                        pr: 1.5,
-                        py: 0.25,
-                      }}>
-                      <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>
-                        {sort ? 'sorted' : 'sort'}
-                      </Typography>
-                    </Box>
-                    {columns.map((column) => {
-                      const active = sort?.columnKey === column.key;
-                      const Icon = !active
+                  <Box component="tbody">
+                    {rows.map((row) => {
+                      const rowSortActive = columnSort?.storyUuid === row.storyUuid;
+                      const RowSortIcon = !rowSortActive
                         ? SwapVertIcon
-                        : sort?.direction === 'desc'
+                        : columnSort?.direction === 'desc'
                           ? ArrowDownwardIcon
                           : ArrowUpwardIcon;
 
                       return (
-                        <Box
-                          component="th"
-                          key={`sort-${column.key}`}
-                          sx={{ p: 0, borderBottom: `1px solid ${colors.common.border}` }}>
-                          <Tooltip
-                            title={
-                              active && sort?.direction === 'desc'
-                                ? `Sort recordings by fewest ${column.label}`
-                                : active
-                                  ? 'Clear sorting'
-                                  : `Sort recordings by most ${column.label}`
-                            }>
-                            <Box
-                              component="button"
-                              type="button"
-                              onClick={() => toggleSort(column.key)}
-                              aria-label={`Sort recordings by ${column.label}`}
-                              sx={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                py: 0.4,
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: active ? colors.primary.main : colors.text.secondary,
-                                '&:hover': { backgroundColor: colors.background.subtle },
-                              }}>
-                              <Icon sx={{ fontSize: 15 }} />
+                        <Box component="tr" key={row.storyUuid}>
+                          <Box
+                            component="th"
+                            scope="row"
+                            sx={{
+                              position: 'sticky',
+                              left: 0,
+                              zIndex: 2,
+                              backgroundColor: colors.background.paper,
+                              borderRight: `1px solid ${colors.common.border}`,
+                              borderBottom: `1px solid ${colors.common.border}`,
+                              textAlign: 'left',
+                              px: 1.5,
+                              py: 0.5,
+                              width: ROW_LABEL_WIDTH,
+                              minWidth: ROW_LABEL_WIDTH,
+                              fontWeight: 500,
+                            }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Link
+                                href={`/story/${row.storyUuid}`}
+                                style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
+                                {row.title}
+                              </Link>
+                              <Tooltip
+                                title={
+                                  rowSortActive && columnSort?.direction === 'desc'
+                                    ? `Order columns by what ${row.title} mentions least`
+                                    : rowSortActive
+                                      ? 'Clear column ordering'
+                                      : `Order columns by what ${row.title} mentions most`
+                                }>
+                                <Box
+                                  component="button"
+                                  type="button"
+                                  onClick={() => toggleColumnSort(row.storyUuid)}
+                                  aria-label={`Order columns by ${row.title}`}
+                                  sx={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexShrink: 0,
+                                    p: 0.25,
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    borderRadius: 0.5,
+                                    color: rowSortActive ? colors.primary.main : colors.text.secondary,
+                                    '&:hover': { backgroundColor: colors.background.subtle },
+                                  }}>
+                                  <RowSortIcon sx={{ fontSize: 15, transform: 'rotate(90deg)' }} />
+                                </Box>
+                              </Tooltip>
                             </Box>
-                          </Tooltip>
+                          </Box>
+
+                          {columns.map((column) => {
+                            const value = matrix.get(cellKey(row.storyUuid, column.key)) ?? 0;
+                            const interactive = value > 0;
+                            const style = heatStyle(value, max, hue);
+
+                            return (
+                              <Box
+                                component="td"
+                                key={column.key}
+                                sx={{
+                                  p: 0,
+                                  borderBottom: `1px solid ${colors.common.border}`,
+                                  width: CELL_WIDTH,
+                                  minWidth: CELL_WIDTH,
+                                  height: CELL_HEIGHT,
+                                }}>
+                                <Tooltip
+                                  title={
+                                    interactive
+                                      ? `${row.title} · ${column.label} · ${value} ${value === 1 ? 'mention' : 'mentions'}`
+                                      : ''
+                                  }
+                                  disableHoverListener={!interactive}>
+                                  <Box
+                                    component={interactive ? 'button' : 'div'}
+                                    type={interactive ? 'button' : undefined}
+                                    onClick={interactive ? () => openCell(row, column) : undefined}
+                                    aria-label={
+                                      interactive
+                                        ? `${value} mentions of ${column.label} in ${row.title}`
+                                        : `No mentions of ${column.label} in ${row.title}`
+                                    }
+                                    style={style}
+                                    sx={{
+                                      width: '100%',
+                                      height: CELL_HEIGHT,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      border: 'none',
+                                      font: 'inherit',
+                                      fontSize: 12.5,
+                                      fontVariantNumeric: 'tabular-nums',
+                                      cursor: interactive ? 'pointer' : 'default',
+                                      '&:hover': interactive
+                                        ? { outline: `2px solid ${colors.primary.main}`, outlineOffset: '-2px' }
+                                        : {},
+                                    }}>
+                                    {showCounts && value > 0 ? value : ''}
+                                  </Box>
+                                </Tooltip>
+                              </Box>
+                            );
+                          })}
                         </Box>
                       );
                     })}
                   </Box>
                 </Box>
-
-                <Box component="tbody">
-                  {rows.map((row) => {
-                    const rowSortActive = columnSort?.storyUuid === row.storyUuid;
-                    const RowSortIcon = !rowSortActive
-                      ? SwapVertIcon
-                      : columnSort?.direction === 'desc'
-                        ? ArrowDownwardIcon
-                        : ArrowUpwardIcon;
-
-                    return (
-                      <Box component="tr" key={row.storyUuid}>
-                        <Box
-                          component="th"
-                          scope="row"
-                          sx={{
-                            position: 'sticky',
-                            left: 0,
-                            zIndex: 2,
-                            backgroundColor: colors.background.paper,
-                            borderRight: `1px solid ${colors.common.border}`,
-                            borderBottom: `1px solid ${colors.common.border}`,
-                            textAlign: 'left',
-                            px: 1.5,
-                            py: 0.5,
-                            width: ROW_LABEL_WIDTH,
-                            minWidth: ROW_LABEL_WIDTH,
-                            fontWeight: 500,
-                          }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Link
-                              href={`/story/${row.storyUuid}`}
-                              style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
-                              {row.title}
-                            </Link>
-                            <Tooltip
-                              title={
-                                rowSortActive && columnSort?.direction === 'desc'
-                                  ? `Order columns by what ${row.title} mentions least`
-                                  : rowSortActive
-                                    ? 'Clear column ordering'
-                                    : `Order columns by what ${row.title} mentions most`
-                              }>
-                              <Box
-                                component="button"
-                                type="button"
-                                onClick={() => toggleColumnSort(row.storyUuid)}
-                                aria-label={`Order columns by ${row.title}`}
-                                sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  flexShrink: 0,
-                                  p: 0.25,
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  borderRadius: 0.5,
-                                  color: rowSortActive ? colors.primary.main : colors.text.secondary,
-                                  '&:hover': { backgroundColor: colors.background.subtle },
-                                }}>
-                                <RowSortIcon sx={{ fontSize: 15, transform: 'rotate(90deg)' }} />
-                              </Box>
-                            </Tooltip>
-                          </Box>
-                        </Box>
-
-                        {columns.map((column) => {
-                          const value = matrix.get(cellKey(row.storyUuid, column.key)) ?? 0;
-                          const interactive = value > 0;
-                          const style = heatStyle(value, max, hue);
-
-                          return (
-                            <Box
-                              component="td"
-                              key={column.key}
-                              sx={{
-                                p: 0,
-                                borderBottom: `1px solid ${colors.common.border}`,
-                                width: CELL_WIDTH,
-                                minWidth: CELL_WIDTH,
-                                height: CELL_HEIGHT,
-                              }}>
-                              <Tooltip
-                                title={
-                                  interactive
-                                    ? `${row.title} · ${column.label} · ${value} ${value === 1 ? 'mention' : 'mentions'}`
-                                    : ''
-                                }
-                                disableHoverListener={!interactive}>
-                                <Box
-                                  component={interactive ? 'button' : 'div'}
-                                  type={interactive ? 'button' : undefined}
-                                  onClick={interactive ? () => openCell(row, column) : undefined}
-                                  aria-label={
-                                    interactive
-                                      ? `${value} mentions of ${column.label} in ${row.title}`
-                                      : `No mentions of ${column.label} in ${row.title}`
-                                  }
-                                  style={style}
-                                  sx={{
-                                    width: '100%',
-                                    height: CELL_HEIGHT,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    border: 'none',
-                                    font: 'inherit',
-                                    fontSize: 12.5,
-                                    fontVariantNumeric: 'tabular-nums',
-                                    cursor: interactive ? 'pointer' : 'default',
-                                    '&:hover': interactive
-                                      ? { outline: `2px solid ${colors.primary.main}`, outlineOffset: '-2px' }
-                                      : {},
-                                  }}>
-                                  {showCounts && value > 0 ? value : ''}
-                                </Box>
-                              </Tooltip>
-                            </Box>
-                          );
-                        })}
-                      </Box>
-                    );
-                  })}
-                </Box>
               </Box>
-            </Box>
-          )}
+            )}
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
-            <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>Fewer</Typography>
-            {[0.08, 0.3, 0.52, 0.72, 0.95].map((alpha) => (
-              <Box
-                key={alpha}
-                sx={{ width: 26, height: 12, borderRadius: 0.5, backgroundColor: hue, opacity: alpha }}
-              />
-            ))}
-            <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>
-              More{max > 0 ? ` (up to ${max.toLocaleString()})` : ''}
-            </Typography>
-          </Box>
-        </>
-      )}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+              <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>Fewer</Typography>
+              {[0.08, 0.3, 0.52, 0.72, 0.95].map((alpha) => (
+                <Box
+                  key={alpha}
+                  sx={{ width: 26, height: 12, borderRadius: 0.5, backgroundColor: hue, opacity: alpha }}
+                />
+              ))}
+              <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>
+                More{max > 0 ? ` (up to ${max.toLocaleString()})` : ''}
+              </Typography>
+            </Box>
+          </>
+        )}
+      </Box>
 
       {selected && (
-        <NerEntityModal
-          open
-          onClose={() => setSelected(null)}
-          entityText={selected.entity.text}
-          entityLabel={selected.entity.label}
-          entityVariants={selected.entity.variants.map((variant) => variant.text)}
-          showInterviewTab={false}
-        />
+        <Box
+          sx={{
+            flexShrink: 0,
+            width: { xs: '100%', md: 440 },
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            position: 'sticky',
+            top: 0,
+            alignSelf: 'flex-start',
+            height: '100vh',
+          }}>
+          <EntityDetailPanel
+            target={{
+              text: selected.entity.text,
+              label: selected.entity.label,
+              variants: selected.entity.variants.map((variant) => variant.text),
+              focusStoryUuid: selected.storyUuid,
+            }}
+            onClose={() => setSelected(null)}
+          />
+        </Box>
       )}
     </Box>
   );
