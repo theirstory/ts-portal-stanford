@@ -39,7 +39,7 @@ export const AppTopBar = () => {
   const isEntitiesPage = pathname.startsWith('/entities');
   const isHomePage = pathname === '/';
   const isFullScreenPage = isStoryPage || isChatPage;
-  const isAutoCollapsePage = isStoryPage || isChatPage || isIndexPage;
+  const isAutoCollapsePage = isStoryPage || isChatPage || isIndexPage || isEntitiesPage;
   const isHeaderOverlayEnabled = config?.ui?.portalHeaderOverlay?.enabled ?? true;
   const organizationLogoPath = config.organization.logo?.path?.trim();
   const shouldUseCustomLogo = Boolean(organizationLogoPath);
