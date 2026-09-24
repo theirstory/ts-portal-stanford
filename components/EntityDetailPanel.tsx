@@ -240,12 +240,26 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
             forwardSeekOffset={10}
             backwardSeekOffset={10}
             accentColor={muxPlayerThemeProps.accentColor}
+            // Mux shows the default track unless captions are hidden explicitly.
+            defaultHiddenCaptions={false}
             style={{
               ...muxPlayerThemeProps.style,
               width: '100%',
               aspectRatio: playingRecording.isAudioFile ? 'auto' : '16/9',
-            }}
-          />
+            }}>
+            {/*
+              The Mux assets carry no caption track, so this supplies one built
+              from the transcript we already hold. Slotted into the player so it
+              appears under the usual CC control.
+            */}
+            <track
+              kind="captions"
+              label="English"
+              srcLang="en"
+              default
+              src={`/api/captions?storyId=${encodeURIComponent(playingRecording.storyUuid)}`}
+            />
+          </MuxPlayer>
         </Box>
       )}
 
