@@ -559,6 +559,11 @@ export default function EntitiesPage() {
                             fontWeight: 500,
                           }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Link
+                              href={`/story/${row.storyUuid}`}
+                              style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
+                              {row.title}
+                            </Link>
                             <Tooltip
                               title={
                                 rowSortActive && columnSort?.direction === 'desc'
@@ -575,6 +580,7 @@ export default function EntitiesPage() {
                                 sx={{
                                   display: 'flex',
                                   alignItems: 'center',
+                                  flexShrink: 0,
                                   p: 0.25,
                                   background: 'none',
                                   border: 'none',
@@ -586,11 +592,6 @@ export default function EntitiesPage() {
                                 <RowSortIcon sx={{ fontSize: 15, transform: 'rotate(90deg)' }} />
                               </Box>
                             </Tooltip>
-                            <Link
-                              href={`/story/${row.storyUuid}`}
-                              style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
-                              {row.title}
-                            </Link>
                           </Box>
                         </Box>
 
@@ -677,6 +678,7 @@ export default function EntitiesPage() {
           onClose={() => setSelected(null)}
           entityText={selected.entity.text}
           entityLabel={selected.entity.label}
+          showInterviewTab={false}
         />
       )}
     </Box>

@@ -48,6 +48,13 @@ interface NerEntityModalProps {
   entityText: string;
   entityLabel: string;
   currentStoryUuid?: string;
+  /**
+   * Whether "In the interview" is meaningful for this caller. Collection-level
+   * views (the entity map) pass false: the recording behind the modal is
+   * whatever story the viewer happened to open last, so the tab would count
+   * the entity against an unrelated interview and report zero.
+   */
+  showInterviewTab?: boolean;
 }
 
 interface EntityOccurrence {
@@ -260,6 +267,7 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
   entityText,
   entityLabel,
   currentStoryUuid,
+  showInterviewTab = true,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -270,12 +278,9 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
   const [projectRecordingCount, setProjectRecordingCount] = useState<number | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const { storyHubPage, setUpdateSelectedNerLabel, selected_ner_labels, allWords } = useSemanticSearchStore();
-  /**
-   * The modal is also opened from collection-level views (the entity map),
-   * where no recording is loaded. There is no "this interview" to report on
-   * there, so the tab is withheld rather than shown reading zero.
-   */
-  const hasCurrentInterview = Boolean(storyHubPage?.properties);
+  // The store keeps the last story the viewer opened, so its presence does not
+  // mean this modal has a recording behind it — the caller has to say.
+  const hasCurrentInterview = showInterviewTab && Boolean(storyHubPage?.properties);
   const { seekAndScroll } = useTranscriptNavigation();
   const nerLabel = entityLabel as (typeof selected_ner_labels)[number];
 
