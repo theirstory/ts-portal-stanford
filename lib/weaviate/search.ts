@@ -1,6 +1,7 @@
 'use server';
 import { Chunks, Testimonies, SchemaMap, SchemaTypes } from '@/types/weaviate';
 import { initWeaviateClient } from './client';
+import { getEntityOccurrencesAcrossCollection } from './entities';
 import { FilterValue, QueryProperty } from 'weaviate-client';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -681,4 +682,13 @@ export async function getNerEntityRecordingCounts(
   }
 
   return result;
+}
+
+/**
+ * Server-action wrapper so client components can read occurrence-level entity
+ * data. The underlying query is in lib/weaviate/entities.ts, shared with the
+ * entity map so both count the same way.
+ */
+export async function getEntityOccurrences(entityText: string, entityLabel: string, variants: string[] = []) {
+  return getEntityOccurrencesAcrossCollection(entityText, entityLabel, variants);
 }

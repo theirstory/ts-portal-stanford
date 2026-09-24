@@ -158,3 +158,39 @@ describe('aggregateEntitiesFromChunks', () => {
     assert.equal(result.truncated, false);
   });
 });
+
+describe('overlapping chunks', () => {
+  it('counts a mention once even when several chunks carry it', () => {
+    // Chunking overlaps, so the same spoken mention is repeated in neighbouring
+    // chunks. Counting raw entries overstated this collection by ~25%.
+    const result = aggregateEntitiesFromChunks([
+      chunk('uuid-a', 'A', [['Stanford', 'organization', 100.0]]),
+      chunk('uuid-a', 'A', [['Stanford', 'organization', 100.0]]),
+      chunk('uuid-a', 'A', [['Stanford', 'organization', 100.004]]),
+    ]);
+
+    assert.equal(result.entities.length, 1);
+    assert.equal(result.entities[0].mentions, 1);
+    assert.equal(result.entities[0].stories[0].mentions, 1);
+    assert.equal(result.entities[0].stories[0].occurrences.length, 1);
+  });
+
+  it('keeps genuinely separate mentions of the same name', () => {
+    const result = aggregateEntitiesFromChunks([
+      chunk('uuid-a', 'A', [
+        ['Stanford', 'organization', 100],
+        ['Stanford', 'organization', 250],
+      ]),
+    ]);
+    assert.equal(result.entities[0].mentions, 2);
+  });
+
+  it('does not merge the same timestamp across different recordings', () => {
+    const result = aggregateEntitiesFromChunks([
+      chunk('uuid-a', 'A', [['Stanford', 'organization', 100]]),
+      chunk('uuid-b', 'B', [['Stanford', 'organization', 100]]),
+    ]);
+    assert.equal(result.entities[0].mentions, 2);
+    assert.equal(result.entities[0].stories.length, 2);
+  });
+});

@@ -678,6 +678,7 @@ export default function EntitiesPage() {
           onClose={() => setSelected(null)}
           entityText={selected.entity.text}
           entityLabel={selected.entity.label}
+          entityVariants={selected.entity.variants.map((variant) => variant.text)}
           showInterviewTab={false}
         />
       )}

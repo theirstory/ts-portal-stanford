@@ -23,7 +23,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSemanticSearchStore } from '@/app/stores/useSemanticSearchStore';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
-import { searchNerEntitiesAcrossCollection } from '@/lib/weaviate/search';
+import { getEntityOccurrences } from '@/lib/weaviate/search';
 import { WeaviateGenericObject } from 'weaviate-client';
 import { Chunks } from '@/types/weaviate';
 import { colors } from '@/lib/theme';
@@ -55,6 +55,8 @@ interface NerEntityModalProps {
    * the entity against an unrelated interview and report zero.
    */
   showInterviewTab?: boolean;
+  /** Other spellings of this entity, when the caller groups variants. */
+  entityVariants?: string[];
 }
 
 interface EntityOccurrence {
@@ -268,6 +270,7 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
   entityLabel,
   currentStoryUuid,
   showInterviewTab = true,
+  entityVariants,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -317,22 +320,42 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
 
   // Load collection data, total mention count, and recording count when modal opens
   // Use high limit so "In the project" reflects most matches available in one query (Weaviate max 10k per query)
+  const variantKey = (entityVariants ?? []).join('|');
+
   useEffect(() => {
     if (!open) return;
     setProjectRecordingCount(null);
     setProjectMentionCount(null);
     setLoading(true);
-    searchNerEntitiesAcrossCollection(entityText, entityLabel, currentStoryUuid, 10_000)
-      .then((searchResult) => {
-        const objects = searchResult.objects;
-        const recordingIds = new Set<string>();
-        for (const obj of objects) {
-          const id = (obj.properties as ChunkProps)?.theirstory_id;
-          if (id) recordingIds.add(String(id));
-        }
-        setCollectionOccurrences(objects);
-        setProjectMentionCount(objects.length);
-        setProjectRecordingCount(recordingIds.size);
+
+    // Occurrence-level, not chunk-level: chunking overlaps, so one spoken
+    // mention used to arrive as two or three near-identical passages. That
+    // both inflated the count and showed the reader the same moment twice.
+    getEntityOccurrences(entityText, entityLabel, variantKey ? variantKey.split('|') : [])
+      .then((result) => {
+        const recordings = currentStoryUuid
+          ? result.recordings.filter((recording) => recording.storyUuid !== currentStoryUuid)
+          : result.recordings;
+
+        // Kept in the shape the list below already renders, so one row is now
+        // one moment the entity is spoken.
+        const flattened = recordings.flatMap((recording) =>
+          recording.occurrences.map((occurrence) => ({
+            uuid: `${recording.storyUuid}:${occurrence.start}`,
+            properties: {
+              theirstory_id: recording.storyUuid,
+              interview_title: recording.interviewTitle,
+              start_time: occurrence.start,
+              end_time: occurrence.end ?? occurrence.start,
+              speaker: occurrence.speaker,
+              transcription: occurrence.context,
+            },
+          })),
+        ) as unknown as WeaviateGenericObject<Chunks, any>[];
+
+        setCollectionOccurrences(flattened);
+        setProjectMentionCount(flattened.length);
+        setProjectRecordingCount(recordings.length);
       })
       .catch((error) => {
         console.error('Error loading collection occurrences:', error);
@@ -340,7 +363,7 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
       .finally(() => {
         setLoading(false);
       });
-  }, [open, entityText, entityLabel, currentStoryUuid]);
+  }, [open, entityText, entityLabel, currentStoryUuid, variantKey]);
 
   const createSimpleContext = (
     transcription: string,

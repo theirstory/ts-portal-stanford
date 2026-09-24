@@ -16,6 +16,17 @@
 const CHUNK_BATCH_SIZE = 500;
 const MAX_CHUNKS = 50_000;
 
+/**
+ * Chunking overlaps by design, so one spoken mention is carried by two or three
+ * neighbouring chunks and its entity is repeated in each. Counting raw entries
+ * therefore overstates the collection by about a quarter. An occurrence is
+ * identified by where it is spoken, not by how many chunks happen to cover it.
+ */
+const OCCURRENCE_TIME_PRECISION = 2;
+
+const occurrenceKey = (storyUuid: string, label: string, start: number, text: string) =>
+  `${storyUuid}::${label}::${start.toFixed(OCCURRENCE_TIME_PRECISION)}::${text.toLowerCase()}`;
+
 export type EntityOccurrence = {
   /** Seconds into the recording. */
   start: number;
@@ -156,6 +167,7 @@ const toAggregate = (group: GroupAccumulator): EntityAggregate => {
  */
 export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncated = false): EntityAggregateResult => {
   const groups = new Map<string, GroupAccumulator>();
+  const seen = new Set<string>();
 
   for (const chunk of chunks) {
     if (!chunk.storyUuid) continue;
@@ -164,6 +176,14 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
       const text = String(datum?.text ?? '').trim();
       const label = String(datum?.label ?? '').trim();
       if (!text || !label) continue;
+
+      // Skip the same mention arriving again from an overlapping chunk.
+      const start = Number(datum?.start_time);
+      if (Number.isFinite(start)) {
+        const key = occurrenceKey(chunk.storyUuid, label, start, text);
+        if (seen.has(key)) continue;
+        seen.add(key);
+      }
 
       const normalized = normalizeEntityKey(text);
       if (!normalized) continue;
@@ -178,7 +198,7 @@ export const aggregateEntitiesFromChunks = (chunks: EntityChunkInput[], truncate
       group.mentions += 1;
       group.variants.set(text, (group.variants.get(text) ?? 0) + 1);
 
-      const startTime = Number(datum?.start_time);
+      const startTime = start;
       const endTime = Number(datum?.end_time);
       const occurrence: EntityOccurrence | null = Number.isFinite(startTime)
         ? { start: startTime, ...(Number.isFinite(endTime) ? { end: endTime } : {}), text }
@@ -254,9 +274,8 @@ type GraphqlChunk = {
  * every chunk, which is most of the collection's bytes. GraphQL asks for
  * exactly the three fields this needs.
  */
-const fetchChunkPage = async (limit: number, offset: number): Promise<GraphqlChunk[]> => {
+export const runWeaviateGraphql = async <T>(query: string): Promise<T> => {
   const adminKey = process.env.WEAVIATE_ADMIN_KEY;
-  const query = `{Get{Chunks(limit:${limit},offset:${offset}){interview_title theirstory_id ner_data{text label start_time end_time}}}}`;
 
   const response = await fetch(weaviateGraphqlUrl(), {
     method: 'POST',
@@ -271,16 +290,20 @@ const fetchChunkPage = async (limit: number, offset: number): Promise<GraphqlChu
     throw new Error(`Weaviate GraphQL returned HTTP ${response.status}`);
   }
 
-  const body = (await response.json()) as {
-    data?: { Get?: { Chunks?: GraphqlChunk[] } };
-    errors?: { message?: string }[];
-  };
+  const body = (await response.json()) as { data?: T; errors?: { message?: string }[] };
 
   if (body.errors?.length) {
     throw new Error(`Weaviate GraphQL error: ${body.errors.map((error) => error.message).join('; ')}`);
   }
 
-  return body.data?.Get?.Chunks ?? [];
+  return body.data as T;
+};
+
+const fetchChunkPage = async (limit: number, offset: number): Promise<GraphqlChunk[]> => {
+  const data = await runWeaviateGraphql<{ Get?: { Chunks?: GraphqlChunk[] } }>(
+    `{Get{Chunks(limit:${limit},offset:${offset}){interview_title theirstory_id ner_data{text label start_time end_time}}}}`,
+  );
+  return data?.Get?.Chunks ?? [];
 };
 
 /**
@@ -319,4 +342,115 @@ export const getEntityAggregates = async (): Promise<EntityAggregateResult> => {
   }
 
   return aggregateEntitiesFromChunks(chunks, truncated);
+};
+
+export type EntityRecordingOccurrences = {
+  storyUuid: string;
+  interviewTitle: string;
+  occurrences: (EntityOccurrence & { speaker: string; context: string })[];
+};
+
+export type EntityCollectionOccurrences = {
+  recordings: EntityRecordingOccurrences[];
+  totalOccurrences: number;
+  recordingCount: number;
+};
+
+/** Escapes a value for inline use in a Weaviate GraphQL string literal. */
+const graphqlString = (value: string) => JSON.stringify(value);
+
+/**
+ * Every occurrence of one entity across the collection, deduplicated.
+ *
+ * The chunk-filtered search used elsewhere returns passages, and because
+ * chunking overlaps, one spoken mention comes back as two or three
+ * near-identical passages — which both inflates the count and shows the reader
+ * the same moment repeatedly. This resolves chunks down to the distinct moments
+ * the entity is actually spoken, keeping one passage per moment for context, so
+ * it agrees with the entity map.
+ */
+export const getEntityOccurrencesAcrossCollection = async (
+  entityText: string,
+  entityLabel: string,
+  /**
+   * Other spellings of the same entity. The map groups transcription variants
+   * (`Stanford."`, `Stanford—`) under one name, so without them the modal
+   * reports fewer mentions than the square the reader just clicked.
+   */
+  variants: string[] = [],
+): Promise<EntityCollectionOccurrences> => {
+  const needle = entityText.trim();
+  if (!needle || !entityLabel.trim()) {
+    return { recordings: [], totalOccurrences: 0, recordingCount: 0 };
+  }
+
+  const forms = Array.from(
+    new Set([needle, ...variants.map((variant) => variant.trim()).filter(Boolean)].map((form) => form.toLowerCase())),
+  );
+
+  const data = await runWeaviateGraphql<{
+    Get?: {
+      Chunks?: (GraphqlChunk & { transcription?: string; speaker?: string })[];
+    };
+  }>(
+    `{Get{Chunks(limit:10000,where:{operator:And,operands:[` +
+      `{path:["ner_text"],operator:ContainsAny,valueText:[${forms.map(graphqlString).join(',')}]},` +
+      `{path:["ner_labels"],operator:ContainsAny,valueText:[${graphqlString(entityLabel)}]}` +
+      `]}){interview_title theirstory_id speaker transcription ner_data{text label start_time end_time}}}}`,
+  );
+
+  const byRecording = new Map<string, EntityRecordingOccurrences>();
+  const seen = new Set<string>();
+
+  for (const chunk of data?.Get?.Chunks ?? []) {
+    const storyUuid = String(chunk.theirstory_id ?? '');
+    if (!storyUuid) continue;
+
+    for (const datum of chunk.ner_data ?? []) {
+      const text = String(datum?.text ?? '').trim();
+      const label = String(datum?.label ?? '').trim();
+      if (!text || label !== entityLabel) continue;
+      if (!forms.includes(text.toLowerCase())) continue;
+
+      const start = Number(datum?.start_time);
+      if (!Number.isFinite(start)) continue;
+
+      const key = occurrenceKey(storyUuid, label, start, text);
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      let recording = byRecording.get(storyUuid);
+      if (!recording) {
+        recording = {
+          storyUuid,
+          interviewTitle: String(chunk.interview_title ?? 'Unknown recording'),
+          occurrences: [],
+        };
+        byRecording.set(storyUuid, recording);
+      }
+
+      const end = Number(datum?.end_time);
+      recording.occurrences.push({
+        start,
+        ...(Number.isFinite(end) ? { end } : {}),
+        text,
+        speaker: String(chunk.speaker ?? ''),
+        // The passage that carries this moment, for context around the name.
+        context: String(chunk.transcription ?? ''),
+      });
+    }
+  }
+
+  const recordings = Array.from(byRecording.values())
+    .map((recording) => ({
+      ...recording,
+      occurrences: recording.occurrences.sort((a, b) => a.start - b.start),
+    }))
+    .sort((a, b) => b.occurrences.length - a.occurrences.length);
+
+  return {
+    recordings,
+    totalOccurrences: recordings.reduce((sum, recording) => sum + recording.occurrences.length, 0),
+    recordingCount: recordings.length,
+  };
 };
