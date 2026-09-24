@@ -272,6 +272,7 @@ export default function EntitiesPage() {
         sx={{
           flex: 1,
           minWidth: 0,
+          overflowX: 'hidden',
           px: { xs: 2, sm: 3 },
           py: { xs: 3, sm: 4 },
           maxWidth: 1400,
@@ -699,7 +700,9 @@ export default function EntitiesPage() {
         <Box
           sx={{
             flexShrink: 0,
-            width: { xs: '100%', md: 440 },
+            // Wide enough that a transcript passage reads as prose rather
+            // than a column of two-word lines.
+            width: { xs: '100%', md: 480, lg: 560 },
             borderLeft: '1px solid',
             borderColor: 'divider',
             position: 'sticky',

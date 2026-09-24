@@ -65,7 +65,7 @@ const Excerpt = ({ context, term, expanded }: { context: string; term: string; e
   }, [text, term]);
 
   return (
-    <Typography sx={{ fontSize: 13.5, lineHeight: 1.55, color: colors.text.primary }}>
+    <Typography sx={{ fontSize: 13.5, lineHeight: 1.55, color: colors.text.primary, overflowWrap: 'anywhere' }}>
       {truncatedStart && '…'}
       {parts.map((part, index) =>
         part.toLowerCase() === term.toLowerCase() ? (
@@ -328,7 +328,7 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
                         style={{ borderRadius: 4, objectFit: 'cover', flexShrink: 0 }}
                       />
                     )}
-                    <Box sx={{ minWidth: 0 }}>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
                       <Typography sx={{ fontSize: 14, fontWeight: 600, color: colors.primary.main }} noWrap>
                         {recording.interviewTitle}
                       </Typography>
@@ -339,7 +339,7 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
                   </Box>
 
                   {!isCollapsed && (
-                    <Box sx={{ p: 1.25, display: 'grid', gap: 1 }}>
+                    <Box sx={{ p: 1.25, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1 }}>
                       {recording.occurrences.map((occurrence) => {
                         const key = `${recording.storyUuid}:${occurrence.start}`;
                         const isExpanded = expanded.has(key);
@@ -355,7 +355,13 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
                               bgcolor: colors.background.paper,
                             }}>
                             <Box
-                              sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'baseline',
+                                justifyContent: 'space-between',
+                                gap: 1,
+                                minWidth: 0,
+                              }}>
                               {occurrence.sectionTitle && (
                                 <Typography sx={{ fontSize: 12.5, fontWeight: 600 }} noWrap>
                                   {occurrence.sectionTitle}
