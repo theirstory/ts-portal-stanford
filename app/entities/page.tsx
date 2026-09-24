@@ -567,10 +567,23 @@ export default function EntitiesPage() {
                               minWidth: ROW_LABEL_WIDTH,
                               fontWeight: 500,
                             }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                               <Link
                                 href={`/story/${row.storyUuid}`}
-                                style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
+                                title={row.title}
+                                // Takes the slack and truncates, so every sort
+                                // control lands on the same vertical line
+                                // regardless of how long the title is.
+                                style={{
+                                  color: colors.text.primary,
+                                  textDecoration: 'none',
+                                  fontSize: 13.5,
+                                  flex: 1,
+                                  minWidth: 0,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}>
                                 {row.title}
                               </Link>
                               <Tooltip
