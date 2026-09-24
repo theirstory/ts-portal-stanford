@@ -179,7 +179,24 @@ export default function EntitiesPage() {
         .filter((entity) => entity.label === category)
         .filter((entity) => !needle || entity.text.toLowerCase().includes(needle));
 
-      const visible = showAllColumns ? inCategory : inCategory.slice(0, DEFAULT_COLUMN_LIMIT);
+      // Ranking before the cut matters: the default order is collection-wide
+      // frequency, so when a reader is asking about one recording, the entities
+      // that recording actually talks about would be dropped by the column
+      // limit if they happen to be rare across the collection.
+      const mentionsIn = (entity: EntityAggregate, storyUuid: string) =>
+        entity.stories.find((story) => story.storyUuid === storyUuid)?.mentions ?? 0;
+
+      const ranked = columnSort
+        ? [...inCategory].sort((a, b) => {
+            const direction = columnSort.direction === 'desc' ? -1 : 1;
+            const left = mentionsIn(a, columnSort.storyUuid);
+            const right = mentionsIn(b, columnSort.storyUuid);
+            if (left === right) return a.text.localeCompare(b.text);
+            return (left - right) * direction;
+          })
+        : inCategory;
+
+      const visible = showAllColumns ? ranked : ranked.slice(0, DEFAULT_COLUMN_LIMIT);
 
       columnDefs = visible.map((entity) => {
         byColumn.set(entity.key, entity);
@@ -198,9 +215,9 @@ export default function EntitiesPage() {
       if (value > highest) highest = value;
     });
 
-    // Ordering columns by one recording answers "what does this person talk
-    // about most", which the default order (collection-wide frequency) hides.
-    if (columnSort) {
+    // The overview's columns are fixed categories, so they are ordered here
+    // rather than before a cut.
+    if (columnSort && category === null) {
       const direction = columnSort.direction === 'desc' ? -1 : 1;
       columnDefs = [...columnDefs].sort((a, b) => {
         const left = counts.get(cellKey(columnSort.storyUuid, a.key)) ?? 0;
@@ -217,16 +234,29 @@ export default function EntitiesPage() {
   // they talk about one thing; without a sort the matrix only answers
   // "where is this mentioned", never "who mentions it most".
   const rows = useMemo<Row[]>(() => {
-    if (!sort) return baseRows;
+    let ordered = baseRows;
 
-    const direction = sort.direction === 'desc' ? -1 : 1;
-    return [...baseRows].sort((a, b) => {
-      const left = matrix.get(cellKey(a.storyUuid, sort.columnKey)) ?? 0;
-      const right = matrix.get(cellKey(b.storyUuid, sort.columnKey)) ?? 0;
-      if (left === right) return a.title.localeCompare(b.title);
-      return (left - right) * direction;
-    });
-  }, [baseRows, matrix, sort]);
+    if (sort) {
+      const direction = sort.direction === 'desc' ? -1 : 1;
+      ordered = [...baseRows].sort((a, b) => {
+        const left = matrix.get(cellKey(a.storyUuid, sort.columnKey)) ?? 0;
+        const right = matrix.get(cellKey(b.storyUuid, sort.columnKey)) ?? 0;
+        if (left === right) return a.title.localeCompare(b.title);
+        return (left - right) * direction;
+      });
+    }
+
+    // The recording the columns are ordered by goes first. Otherwise the reader
+    // has to find it again in the list to read the ordering it produced.
+    if (columnSort) {
+      const focused = ordered.find((row) => row.storyUuid === columnSort.storyUuid);
+      if (focused) {
+        ordered = [focused, ...ordered.filter((row) => row.storyUuid !== columnSort.storyUuid)];
+      }
+    }
+
+    return ordered;
+  }, [baseRows, matrix, sort, columnSort]);
 
   const toggleColumnSort = (storyUuid: string) =>
     setColumnSort((current) => {
@@ -242,6 +272,11 @@ export default function EntitiesPage() {
       return null;
     });
 
+  const focusedRowTitle =
+    category !== null && columnSort
+      ? (baseRows.find((row) => row.storyUuid === columnSort.storyUuid)?.title ?? null)
+      : null;
+
   const categoryTotal = useMemo(
     () => (data && category ? data.entities.filter((entity) => entity.label === category).length : 0),
     [data, category],
@@ -249,11 +284,14 @@ export default function EntitiesPage() {
 
   const openCell = (row: Row, column: Column) => {
     if (category === null) {
+      // "How does this category show up in this recording?" — drill in with the
+      // recording's own entities ranked and its row first, rather than dropping
+      // the reader into a collection-wide view they have to re-find it in.
       setCategory(column.nerLabel);
       setShowAllColumns(false);
       setFilter('');
       setSort(null);
-      setColumnSort(null);
+      setColumnSort({ storyUuid: row.storyUuid, direction: 'desc' });
       return;
     }
 
@@ -301,7 +339,9 @@ export default function EntitiesPage() {
             <Typography sx={{ color: colors.text.secondary, fontSize: 14.5, mt: 0.5, maxWidth: '68ch' }}>
               {category === null
                 ? 'Each column is a kind of thing the interviews mention; each row is a recording. Darker means more mentions. Pick a column to see the individual names inside it.'
-                : `Each column is one ${getNerDisplayName(category).toLowerCase().replace(/s$/, '')} mentioned in the collection. Select a square to see every time it is spoken in that recording.`}
+                : focusedRowTitle
+                  ? `Ordered by what ${focusedRowTitle} mentions most, with that recording first. Select a square to see every time an entity is spoken.`
+                  : `Each column is one ${getNerDisplayName(category).toLowerCase().replace(/s$/, '')} mentioned in the collection. Select a square to see every time it is spoken in that recording.`}
             </Typography>
           </Box>
         </Box>
@@ -543,6 +583,7 @@ export default function EntitiesPage() {
                   <Box component="tbody">
                     {rows.map((row) => {
                       const rowSortActive = columnSort?.storyUuid === row.storyUuid;
+                      const isFocusedRow = rowSortActive && category !== null;
                       const RowSortIcon = !rowSortActive
                         ? SwapVertIcon
                         : columnSort?.direction === 'desc'
@@ -558,7 +599,8 @@ export default function EntitiesPage() {
                               position: 'sticky',
                               left: 0,
                               zIndex: 2,
-                              backgroundColor: colors.background.paper,
+                              backgroundColor: isFocusedRow ? colors.background.subtle : colors.background.paper,
+                              boxShadow: isFocusedRow ? `inset 3px 0 0 ${colors.primary.main}` : 'none',
                               borderRight: `1px solid ${colors.common.border}`,
                               borderBottom: `1px solid ${colors.common.border}`,
                               textAlign: 'left',
