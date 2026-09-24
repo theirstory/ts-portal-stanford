@@ -27,6 +27,12 @@ export async function initWeaviateClient() {
     vectorizer: 'local-embeddings',
   });
 
+  // Explicit timeouts, in seconds. The client's defaults are tuned for a
+  // Weaviate on the same host and time out the initial gRPC handshake before a
+  // remote one can complete — which fails as "timed out after 30ms" rather
+  // than as a connection error, so it reads like a bug in the query.
+  const timeout = { init: 30, query: 120, insert: 180 };
+
   if (!client) {
     if (local) {
       client = await weaviate.connectToCustom({
@@ -34,6 +40,7 @@ export async function initWeaviateClient() {
         httpPort,
         grpcHost,
         grpcPort,
+        timeout,
       });
       return client;
     }
@@ -43,6 +50,7 @@ export async function initWeaviateClient() {
       httpPort,
       grpcHost,
       grpcPort,
+      timeout,
       ...(adminKey ? { authCredentials: new weaviate.ApiKey(adminKey) } : {}),
     });
   }

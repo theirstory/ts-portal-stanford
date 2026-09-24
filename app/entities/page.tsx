@@ -5,21 +5,23 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
-import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
-import CloseIcon from '@mui/icons-material/Close';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SearchIcon from '@mui/icons-material/Search';
+import SwapVertIcon from '@mui/icons-material/SwapVert';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import Link from 'next/link';
 
 import { colors } from '@/lib/theme';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 import type { EntityAggregate, EntityAggregateResult } from '@/lib/weaviate/entities';
+import { NerEntityModal } from '@/app/story/[storyUuid]/Components/NerEntityModal';
 
 /** Columns shown when drilling into one category, before "show all". */
 const DEFAULT_COLUMN_LIMIT = 30;
@@ -71,13 +73,15 @@ const heatStyle = (value: number, max: number, hue: string): React.CSSProperties
   // Square root keeps mid-range values legible; counts are heavily skewed by a
   // handful of very frequent names.
   const intensity = max > 0 ? Math.sqrt(value / max) : 0;
-  const alpha = 0.1 + intensity * 0.85;
+  // Capped below full strength on purpose: the number is always black, so the
+  // fill must never get dark enough to fight it. Depth still reads across the
+  // range, and the count stays legible in every cell.
+  const alpha = 0.08 + intensity * 0.62;
   const [r, g, b] = hexToRgb(hue);
 
   return {
     backgroundColor: `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`,
-    // Once the fill is strong enough, dark text on it stops being legible.
-    color: intensity > 0.6 ? '#fff' : colors.text.primary,
+    color: colors.text.primary,
   };
 };
 
@@ -91,6 +95,8 @@ export default function EntitiesPage() {
   const [showCounts, setShowCounts] = useState(true);
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<{ entity: EntityAggregate; storyUuid: string } | null>(null);
+  /** Column to order rows by, or null for the default (busiest recording first). */
+  const [sort, setSort] = useState<{ columnKey: string; direction: 'desc' | 'asc' } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,7 +120,7 @@ export default function EntitiesPage() {
 
   // Rows are the recordings, ordered by how much they contribute overall so the
   // densest interviews read first.
-  const rows = useMemo<Row[]>(() => {
+  const baseRows = useMemo<Row[]>(() => {
     if (!data) return [];
     const totals = new Map<string, { title: string; mentions: number }>();
 
@@ -193,6 +199,28 @@ export default function EntitiesPage() {
     return { columns: columnDefs, matrix: counts, max: highest, entityByColumn: byColumn };
   }, [data, category, filter, showAllColumns]);
 
+  // Rows reorder by a chosen column so a reader can rank recordings by how much
+  // they talk about one thing; without a sort the matrix only answers
+  // "where is this mentioned", never "who mentions it most".
+  const rows = useMemo<Row[]>(() => {
+    if (!sort) return baseRows;
+
+    const direction = sort.direction === 'desc' ? -1 : 1;
+    return [...baseRows].sort((a, b) => {
+      const left = matrix.get(cellKey(a.storyUuid, sort.columnKey)) ?? 0;
+      const right = matrix.get(cellKey(b.storyUuid, sort.columnKey)) ?? 0;
+      if (left === right) return a.title.localeCompare(b.title);
+      return (left - right) * direction;
+    });
+  }, [baseRows, matrix, sort]);
+
+  const toggleSort = (columnKey: string) =>
+    setSort((current) => {
+      if (current?.columnKey !== columnKey) return { columnKey, direction: 'desc' };
+      if (current.direction === 'desc') return { columnKey, direction: 'asc' };
+      return null;
+    });
+
   const categoryTotal = useMemo(
     () => (data && category ? data.entities.filter((entity) => entity.label === category).length : 0),
     [data, category],
@@ -203,6 +231,7 @@ export default function EntitiesPage() {
       setCategory(column.nerLabel);
       setShowAllColumns(false);
       setFilter('');
+      setSort(null);
       return;
     }
 
@@ -226,6 +255,7 @@ export default function EntitiesPage() {
               setCategory(null);
               setFilter('');
               setShowAllColumns(false);
+              setSort(null);
             }}
             sx={{ mt: 0.25 }}>
             <ArrowBackIcon fontSize="small" />
@@ -372,6 +402,7 @@ export default function EntitiesPage() {
                                     setCategory(column.nerLabel);
                                     setShowAllColumns(false);
                                     setFilter('');
+                                    setSort(null);
                                   }
                                 : undefined
                             }
@@ -408,6 +439,70 @@ export default function EntitiesPage() {
                         </Tooltip>
                       </Box>
                     ))}
+                  </Box>
+
+                  <Box component="tr">
+                    <Box
+                      component="th"
+                      sx={{
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 3,
+                        backgroundColor: colors.background.paper,
+                        borderBottom: `1px solid ${colors.common.border}`,
+                        borderRight: `1px solid ${colors.common.border}`,
+                        textAlign: 'right',
+                        pr: 1.5,
+                        py: 0.25,
+                      }}>
+                      <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>
+                        {sort ? 'sorted by column' : 'sort by'}
+                      </Typography>
+                    </Box>
+                    {columns.map((column) => {
+                      const active = sort?.columnKey === column.key;
+                      const Icon = !active
+                        ? SwapVertIcon
+                        : sort?.direction === 'desc'
+                          ? ArrowDownwardIcon
+                          : ArrowUpwardIcon;
+
+                      return (
+                        <Box
+                          component="th"
+                          key={`sort-${column.key}`}
+                          sx={{ p: 0, borderBottom: `1px solid ${colors.common.border}` }}>
+                          <Tooltip
+                            title={
+                              active && sort?.direction === 'desc'
+                                ? `Sort recordings by fewest ${column.label}`
+                                : active
+                                  ? 'Clear sorting'
+                                  : `Sort recordings by most ${column.label}`
+                            }>
+                            <Box
+                              component="button"
+                              type="button"
+                              onClick={() => toggleSort(column.key)}
+                              aria-label={`Sort recordings by ${column.label}`}
+                              sx={{
+                                width: '100%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                py: 0.4,
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: active ? colors.primary.main : colors.text.secondary,
+                                '&:hover': { backgroundColor: colors.background.subtle },
+                              }}>
+                              <Icon sx={{ fontSize: 15 }} />
+                            </Box>
+                          </Tooltip>
+                        </Box>
+                      );
+                    })}
                   </Box>
                 </Box>
 
@@ -514,114 +609,14 @@ export default function EntitiesPage() {
         </>
       )}
 
-      <Drawer
-        anchor="right"
-        open={Boolean(selected)}
-        onClose={() => setSelected(null)}
-        PaperProps={{ sx: { width: { xs: '100%', sm: 440 }, p: 2.5 } }}>
-        {selected && selectedStory && (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
-              <Box>
-                <Typography sx={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{selected.entity.text}</Typography>
-                <Typography sx={{ fontSize: 13, color: colors.text.secondary, mt: 0.25 }}>
-                  {getNerDisplayName(selected.entity.label)} · in {selectedStory.interviewTitle}
-                </Typography>
-              </Box>
-              <IconButton size="small" aria-label="Close" onClick={() => setSelected(null)}>
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </Box>
-
-            <Typography sx={{ fontSize: 13, color: colors.text.secondary, mb: 1.5 }}>
-              {selectedStory.mentions} {selectedStory.mentions === 1 ? 'mention' : 'mentions'} here ·{' '}
-              {selected.entity.mentions} across {selected.entity.stories.length}{' '}
-              {selected.entity.stories.length === 1 ? 'recording' : 'recordings'}
-            </Typography>
-
-            <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 0.5 }}>
-              {selectedStory.occurrences.map((occurrence, index) => (
-                <Box component="li" key={`${occurrence.start}-${index}`}>
-                  <Link
-                    href={`/story/${selected.storyUuid}?start=${Math.floor(occurrence.start)}&nerLabel=${encodeURIComponent(selected.entity.label)}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: 10,
-                      padding: '7px 9px',
-                      borderRadius: 4,
-                      border: `1px solid ${colors.common.border}`,
-                      color: colors.text.primary,
-                      textDecoration: 'none',
-                    }}>
-                    <Typography
-                      sx={{
-                        fontSize: 12.5,
-                        fontVariantNumeric: 'tabular-nums',
-                        color: colors.primary.main,
-                        fontWeight: 600,
-                      }}>
-                      {formatTimecode(occurrence.start)}
-                    </Typography>
-                    <Typography sx={{ fontSize: 13.5 }}>“{occurrence.text}”</Typography>
-                  </Link>
-                </Box>
-              ))}
-            </Box>
-
-            {selectedStory.occurrences.length === 0 && (
-              <Typography sx={{ fontSize: 13.5, color: colors.text.secondary }}>
-                No timings were recorded for these mentions.
-              </Typography>
-            )}
-
-            {selected.entity.stories.length > 1 && (
-              <Box sx={{ mt: 2.5 }}>
-                <Typography sx={{ fontSize: 12, fontWeight: 600, color: colors.text.secondary, mb: 0.75 }}>
-                  Also mentioned in
-                </Typography>
-                <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 0.25 }}>
-                  {selected.entity.stories
-                    .filter((story) => story.storyUuid !== selected.storyUuid)
-                    .map((story) => (
-                      <Box component="li" key={story.storyUuid}>
-                        <Typography
-                          component="button"
-                          onClick={() => setSelected({ entity: selected.entity, storyUuid: story.storyUuid })}
-                          sx={{
-                            fontSize: 13.5,
-                            background: 'none',
-                            border: 'none',
-                            p: '3px 0',
-                            cursor: 'pointer',
-                            color: colors.text.primary,
-                            font: 'inherit',
-                            textAlign: 'left',
-                            '&:hover': { textDecoration: 'underline' },
-                          }}>
-                          {story.interviewTitle}{' '}
-                          <Box component="span" sx={{ color: colors.text.secondary }}>
-                            ({story.mentions})
-                          </Box>
-                        </Typography>
-                      </Box>
-                    ))}
-                </Box>
-              </Box>
-            )}
-
-            {selected.entity.variants.length > 1 && (
-              <Typography sx={{ mt: 2, fontSize: 12, color: colors.text.secondary }}>
-                Also transcribed as{' '}
-                {selected.entity.variants
-                  .filter((variant) => variant.text !== selected.entity.text)
-                  .map((variant) => `“${variant.text}” (${variant.mentions})`)
-                  .join(', ')}
-              </Typography>
-            )}
-          </>
-        )}
-      </Drawer>
+      {selected && (
+        <NerEntityModal
+          open
+          onClose={() => setSelected(null)}
+          entityText={selected.entity.text}
+          entityLabel={selected.entity.label}
+        />
+      )}
     </Box>
   );
 }
