@@ -97,6 +97,8 @@ export default function EntitiesPage() {
   const [selected, setSelected] = useState<{ entity: EntityAggregate; storyUuid: string } | null>(null);
   /** Column to order rows by, or null for the default (busiest recording first). */
   const [sort, setSort] = useState<{ columnKey: string; direction: 'desc' | 'asc' } | null>(null);
+  /** Recording to order columns by, or null for the category's own order. */
+  const [columnSort, setColumnSort] = useState<{ storyUuid: string; direction: 'desc' | 'asc' } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,8 +198,20 @@ export default function EntitiesPage() {
       if (value > highest) highest = value;
     });
 
+    // Ordering columns by one recording answers "what does this person talk
+    // about most", which the default order (collection-wide frequency) hides.
+    if (columnSort) {
+      const direction = columnSort.direction === 'desc' ? -1 : 1;
+      columnDefs = [...columnDefs].sort((a, b) => {
+        const left = counts.get(cellKey(columnSort.storyUuid, a.key)) ?? 0;
+        const right = counts.get(cellKey(columnSort.storyUuid, b.key)) ?? 0;
+        if (left === right) return a.label.localeCompare(b.label);
+        return (left - right) * direction;
+      });
+    }
+
     return { columns: columnDefs, matrix: counts, max: highest, entityByColumn: byColumn };
-  }, [data, category, filter, showAllColumns]);
+  }, [data, category, filter, showAllColumns, columnSort]);
 
   // Rows reorder by a chosen column so a reader can rank recordings by how much
   // they talk about one thing; without a sort the matrix only answers
@@ -213,6 +227,13 @@ export default function EntitiesPage() {
       return (left - right) * direction;
     });
   }, [baseRows, matrix, sort]);
+
+  const toggleColumnSort = (storyUuid: string) =>
+    setColumnSort((current) => {
+      if (current?.storyUuid !== storyUuid) return { storyUuid, direction: 'desc' };
+      if (current.direction === 'desc') return { storyUuid, direction: 'asc' };
+      return null;
+    });
 
   const toggleSort = (columnKey: string) =>
     setSort((current) => {
@@ -232,6 +253,7 @@ export default function EntitiesPage() {
       setShowAllColumns(false);
       setFilter('');
       setSort(null);
+      setColumnSort(null);
       return;
     }
 
@@ -256,6 +278,7 @@ export default function EntitiesPage() {
               setFilter('');
               setShowAllColumns(false);
               setSort(null);
+              setColumnSort(null);
             }}
             sx={{ mt: 0.25 }}>
             <ArrowBackIcon fontSize="small" />
@@ -403,6 +426,7 @@ export default function EntitiesPage() {
                                     setShowAllColumns(false);
                                     setFilter('');
                                     setSort(null);
+                                    setColumnSort(null);
                                   }
                                 : undefined
                             }
@@ -456,7 +480,7 @@ export default function EntitiesPage() {
                         py: 0.25,
                       }}>
                       <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>
-                        {sort ? 'sorted by column' : 'sort by'}
+                        {sort ? 'sorted' : 'sort'}
                       </Typography>
                     </Box>
                     {columns.map((column) => {
@@ -507,88 +531,126 @@ export default function EntitiesPage() {
                 </Box>
 
                 <Box component="tbody">
-                  {rows.map((row) => (
-                    <Box component="tr" key={row.storyUuid}>
-                      <Box
-                        component="th"
-                        scope="row"
-                        sx={{
-                          position: 'sticky',
-                          left: 0,
-                          zIndex: 2,
-                          backgroundColor: colors.background.paper,
-                          borderRight: `1px solid ${colors.common.border}`,
-                          borderBottom: `1px solid ${colors.common.border}`,
-                          textAlign: 'left',
-                          px: 1.5,
-                          py: 0.5,
-                          width: ROW_LABEL_WIDTH,
-                          minWidth: ROW_LABEL_WIDTH,
-                          fontWeight: 500,
-                        }}>
-                        <Link
-                          href={`/story/${row.storyUuid}`}
-                          style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
-                          {row.title}
-                        </Link>
-                      </Box>
+                  {rows.map((row) => {
+                    const rowSortActive = columnSort?.storyUuid === row.storyUuid;
+                    const RowSortIcon = !rowSortActive
+                      ? SwapVertIcon
+                      : columnSort?.direction === 'desc'
+                        ? ArrowDownwardIcon
+                        : ArrowUpwardIcon;
 
-                      {columns.map((column) => {
-                        const value = matrix.get(cellKey(row.storyUuid, column.key)) ?? 0;
-                        const interactive = value > 0;
-                        const style = heatStyle(value, max, hue);
-
-                        return (
-                          <Box
-                            component="td"
-                            key={column.key}
-                            sx={{
-                              p: 0,
-                              borderBottom: `1px solid ${colors.common.border}`,
-                              width: CELL_WIDTH,
-                              minWidth: CELL_WIDTH,
-                              height: CELL_HEIGHT,
-                            }}>
+                    return (
+                      <Box component="tr" key={row.storyUuid}>
+                        <Box
+                          component="th"
+                          scope="row"
+                          sx={{
+                            position: 'sticky',
+                            left: 0,
+                            zIndex: 2,
+                            backgroundColor: colors.background.paper,
+                            borderRight: `1px solid ${colors.common.border}`,
+                            borderBottom: `1px solid ${colors.common.border}`,
+                            textAlign: 'left',
+                            px: 1.5,
+                            py: 0.5,
+                            width: ROW_LABEL_WIDTH,
+                            minWidth: ROW_LABEL_WIDTH,
+                            fontWeight: 500,
+                          }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                             <Tooltip
                               title={
-                                interactive
-                                  ? `${row.title} · ${column.label} · ${value} ${value === 1 ? 'mention' : 'mentions'}`
-                                  : ''
-                              }
-                              disableHoverListener={!interactive}>
+                                rowSortActive && columnSort?.direction === 'desc'
+                                  ? `Order columns by what ${row.title} mentions least`
+                                  : rowSortActive
+                                    ? 'Clear column ordering'
+                                    : `Order columns by what ${row.title} mentions most`
+                              }>
                               <Box
-                                component={interactive ? 'button' : 'div'}
-                                type={interactive ? 'button' : undefined}
-                                onClick={interactive ? () => openCell(row, column) : undefined}
-                                aria-label={
-                                  interactive
-                                    ? `${value} mentions of ${column.label} in ${row.title}`
-                                    : `No mentions of ${column.label} in ${row.title}`
-                                }
-                                style={style}
+                                component="button"
+                                type="button"
+                                onClick={() => toggleColumnSort(row.storyUuid)}
+                                aria-label={`Order columns by ${row.title}`}
                                 sx={{
-                                  width: '100%',
-                                  height: CELL_HEIGHT,
                                   display: 'flex',
                                   alignItems: 'center',
-                                  justifyContent: 'center',
+                                  p: 0.25,
+                                  background: 'none',
                                   border: 'none',
-                                  font: 'inherit',
-                                  fontSize: 12.5,
-                                  fontVariantNumeric: 'tabular-nums',
-                                  cursor: interactive ? 'pointer' : 'default',
-                                  '&:hover': interactive
-                                    ? { outline: `2px solid ${colors.primary.main}`, outlineOffset: '-2px' }
-                                    : {},
+                                  cursor: 'pointer',
+                                  borderRadius: 0.5,
+                                  color: rowSortActive ? colors.primary.main : colors.text.secondary,
+                                  '&:hover': { backgroundColor: colors.background.subtle },
                                 }}>
-                                {showCounts && value > 0 ? value : ''}
+                                <RowSortIcon sx={{ fontSize: 15, transform: 'rotate(90deg)' }} />
                               </Box>
                             </Tooltip>
+                            <Link
+                              href={`/story/${row.storyUuid}`}
+                              style={{ color: colors.text.primary, textDecoration: 'none', fontSize: 13.5 }}>
+                              {row.title}
+                            </Link>
                           </Box>
-                        );
-                      })}
-                    </Box>
-                  ))}
+                        </Box>
+
+                        {columns.map((column) => {
+                          const value = matrix.get(cellKey(row.storyUuid, column.key)) ?? 0;
+                          const interactive = value > 0;
+                          const style = heatStyle(value, max, hue);
+
+                          return (
+                            <Box
+                              component="td"
+                              key={column.key}
+                              sx={{
+                                p: 0,
+                                borderBottom: `1px solid ${colors.common.border}`,
+                                width: CELL_WIDTH,
+                                minWidth: CELL_WIDTH,
+                                height: CELL_HEIGHT,
+                              }}>
+                              <Tooltip
+                                title={
+                                  interactive
+                                    ? `${row.title} · ${column.label} · ${value} ${value === 1 ? 'mention' : 'mentions'}`
+                                    : ''
+                                }
+                                disableHoverListener={!interactive}>
+                                <Box
+                                  component={interactive ? 'button' : 'div'}
+                                  type={interactive ? 'button' : undefined}
+                                  onClick={interactive ? () => openCell(row, column) : undefined}
+                                  aria-label={
+                                    interactive
+                                      ? `${value} mentions of ${column.label} in ${row.title}`
+                                      : `No mentions of ${column.label} in ${row.title}`
+                                  }
+                                  style={style}
+                                  sx={{
+                                    width: '100%',
+                                    height: CELL_HEIGHT,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    border: 'none',
+                                    font: 'inherit',
+                                    fontSize: 12.5,
+                                    fontVariantNumeric: 'tabular-nums',
+                                    cursor: interactive ? 'pointer' : 'default',
+                                    '&:hover': interactive
+                                      ? { outline: `2px solid ${colors.primary.main}`, outlineOffset: '-2px' }
+                                      : {},
+                                  }}>
+                                  {showCounts && value > 0 ? value : ''}
+                                </Box>
+                              </Tooltip>
+                            </Box>
+                          );
+                        })}
+                      </Box>
+                    );
+                  })}
                 </Box>
               </Box>
             </Box>

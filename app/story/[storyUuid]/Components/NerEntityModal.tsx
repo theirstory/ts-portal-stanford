@@ -270,6 +270,12 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
   const [projectRecordingCount, setProjectRecordingCount] = useState<number | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const { storyHubPage, setUpdateSelectedNerLabel, selected_ner_labels, allWords } = useSemanticSearchStore();
+  /**
+   * The modal is also opened from collection-level views (the entity map),
+   * where no recording is loaded. There is no "this interview" to report on
+   * there, so the tab is withheld rather than shown reading zero.
+   */
+  const hasCurrentInterview = Boolean(storyHubPage?.properties);
   const { seekAndScroll } = useTranscriptNavigation();
   const nerLabel = entityLabel as (typeof selected_ner_labels)[number];
 
@@ -297,6 +303,12 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
       }),
     );
   }, [allWords, entityLabel, entityText, storyHubPage?.properties.ner_data]);
+
+  // Open on the project tab when there is no interview behind the modal,
+  // otherwise it opens on an empty tab reading "No occurrences found".
+  useEffect(() => {
+    if (open) setTabValue(hasCurrentInterview ? 0 : 1);
+  }, [open, hasCurrentInterview]);
 
   // Load collection data, total mention count, and recording count when modal opens
   // Use high limit so "In the project" reflects most matches available in one query (Weaviate max 10k per query)
@@ -550,22 +562,26 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
                 backgroundColor: colors.primary.main,
               },
             }}>
+            {hasCurrentInterview && (
+              <Tab
+                value={0}
+                label={interviewTabLabel}
+                sx={{
+                  textTransform: 'none',
+                  minHeight: { xs: 56, md: 52 },
+                  minWidth: 'max-content',
+                  px: { xs: 1, md: 1.5 },
+                  fontSize: { xs: '0.95rem', md: '0.82rem' },
+                  fontWeight: 600,
+                  color: colors.text.secondary,
+                  '&.Mui-selected': {
+                    color: colors.primary.main,
+                  },
+                }}
+              />
+            )}
             <Tab
-              label={interviewTabLabel}
-              sx={{
-                textTransform: 'none',
-                minHeight: { xs: 56, md: 52 },
-                minWidth: 'max-content',
-                px: { xs: 1, md: 1.5 },
-                fontSize: { xs: '0.95rem', md: '0.82rem' },
-                fontWeight: 600,
-                color: colors.text.secondary,
-                '&.Mui-selected': {
-                  color: colors.primary.main,
-                },
-              }}
-            />
-            <Tab
+              value={1}
               label={projectTabLabel}
               sx={{
                 textTransform: 'none',
@@ -583,7 +599,7 @@ export const NerEntityModal: React.FC<NerEntityModalProps> = ({
           </Tabs>
         </Box>
 
-        {tabValue === 0 && (
+        {tabValue === 0 && hasCurrentInterview && (
           <Box
             sx={{
               p: { xs: 1.25, md: 1.5 },
