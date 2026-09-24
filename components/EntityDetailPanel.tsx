@@ -22,6 +22,7 @@ import { getMuxPlaybackId } from '@/app/utils/converters';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 import { getEntityOccurrences } from '@/lib/weaviate/search';
 import type { EntityCollectionOccurrences } from '@/lib/weaviate/entities';
+import { EntityTranscriptView } from '@/components/EntityTranscriptView';
 
 /** Characters of surrounding passage shown before "Show more". */
 const EXCERPT_RADIUS = 90;
@@ -222,9 +223,12 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
             <IconButton size="small" onClick={() => setPlaying(null)} aria-label="Back to all mentions">
               <ArrowBackIcon fontSize="small" />
             </IconButton>
-            <Typography sx={{ fontSize: 13.5, fontWeight: 600, minWidth: 0 }} noWrap>
-              {playingRecording.interviewTitle}
-            </Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: 13.5, fontWeight: 600 }} noWrap>
+                {playingRecording.interviewTitle}
+              </Typography>
+              <Typography sx={{ fontSize: 11, color: colors.text.secondary }}>Back to all mentions</Typography>
+            </Box>
             <Box sx={{ flexGrow: 1 }} />
             <Link
               href={`/story/${playingRecording.storyUuid}?start=${Math.floor(playing.start)}&nerLabel=${encodeURIComponent(target.label)}`}
@@ -263,7 +267,17 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
         </Box>
       )}
 
-      {data && (
+      {data && playing && playingRecording && (
+        <EntityTranscriptView
+          storyUuid={playingRecording.storyUuid}
+          entityLabel={target.label}
+          occurrences={playingRecording.occurrences}
+          activeStart={playing.start}
+          onSelectOccurrence={(start) => setPlaying({ storyUuid: playingRecording.storyUuid, start })}
+        />
+      )}
+
+      {data && !playing && (
         <>
           <Box sx={{ px: 2, pt: 1.5, pb: 1, flexShrink: 0 }}>
             <Typography sx={{ fontSize: 13, color: colors.text.secondary, mb: 1 }}>
