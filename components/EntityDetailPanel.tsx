@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -11,9 +11,13 @@ import Chip from '@mui/material/Chip';
 import CloseIcon from '@mui/icons-material/Close';
 import SearchIcon from '@mui/icons-material/Search';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MuxPlayer from '@mux/mux-player-react';
+import type MuxPlayerElement from '@mux/mux-player';
 import Link from 'next/link';
 
 import { colors } from '@/lib/theme';
+import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
 import { getEntityOccurrences } from '@/lib/weaviate/search';
@@ -94,6 +98,9 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
   const [filter, setFilter] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  /** Recording opened for playback inside the panel, with the moment to seek to. */
+  const [playing, setPlaying] = useState<{ storyUuid: string; start: number } | null>(null);
+  const playerRef = useRef<MuxPlayerElement>(null);
 
   const variantKey = target.variants.join('|');
 
@@ -103,6 +110,7 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
     setError(false);
     setFilter('');
     setExpanded(new Set());
+    setPlaying(null);
 
     getEntityOccurrences(target.text, target.label, variantKey ? variantKey.split('|') : [])
       .then((result) => {
@@ -126,6 +134,14 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
       cancelled = true;
     };
   }, [target.text, target.label, target.focusStoryUuid, variantKey]);
+
+  // Selecting another moment in the same recording seeks the open player
+  // rather than remounting it, so playback is not interrupted.
+  useEffect(() => {
+    if (playing && playerRef.current) {
+      playerRef.current.currentTime = playing.start;
+    }
+  }, [playing]);
 
   const recordings = useMemo(() => {
     if (!data) return [];
@@ -153,6 +169,10 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
     else next.add(id);
     return next;
   };
+
+  const playingRecording = playing
+    ? (data?.recordings.find((recording) => recording.storyUuid === playing.storyUuid) ?? null)
+    : null;
 
   const labelColor = getNerColor(target.label);
 
@@ -194,6 +214,39 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
         <Typography sx={{ p: 3, fontSize: 13.5, color: colors.text.secondary }}>
           These mentions could not be loaded. Close the panel and try again.
         </Typography>
+      )}
+
+      {data && playing && playingRecording && (
+        <Box sx={{ flexShrink: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, py: 0.75 }}>
+            <IconButton size="small" onClick={() => setPlaying(null)} aria-label="Back to all mentions">
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 600, minWidth: 0 }} noWrap>
+              {playingRecording.interviewTitle}
+            </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Link
+              href={`/story/${playingRecording.storyUuid}?start=${Math.floor(playing.start)}&nerLabel=${encodeURIComponent(target.label)}`}
+              style={{ fontSize: 12, color: colors.primary.main, fontWeight: 600, whiteSpace: 'nowrap' }}>
+              Open recording
+            </Link>
+          </Box>
+          <MuxPlayer
+            ref={playerRef}
+            src={playingRecording.videoUrl}
+            audio={playingRecording.isAudioFile}
+            startTime={playing.start}
+            forwardSeekOffset={10}
+            backwardSeekOffset={10}
+            accentColor={muxPlayerThemeProps.accentColor}
+            style={{
+              ...muxPlayerThemeProps.style,
+              width: '100%',
+              aspectRatio: playingRecording.isAudioFile ? 'auto' : '16/9',
+            }}
+          />
+        </Box>
       )}
 
       {data && (
@@ -308,17 +361,27 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
                                   {occurrence.sectionTitle}
                                 </Typography>
                               )}
-                              <Link
-                                href={`/story/${recording.storyUuid}?start=${Math.floor(occurrence.start)}&nerLabel=${encodeURIComponent(target.label)}`}
-                                style={{
+                              <Box
+                                component="button"
+                                type="button"
+                                onClick={() => setPlaying({ storyUuid: recording.storyUuid, start: occurrence.start })}
+                                aria-label={`Play ${recording.interviewTitle} from ${formatTimecode(occurrence.start)}`}
+                                sx={{
                                   fontSize: 12,
                                   color: colors.primary.main,
                                   fontWeight: 600,
                                   whiteSpace: 'nowrap',
-                                  marginLeft: 'auto',
+                                  ml: 'auto',
+                                  background: 'none',
+                                  border: 'none',
+                                  p: 0,
+                                  cursor: 'pointer',
+                                  font: 'inherit',
+                                  textDecoration: 'underline',
+                                  textUnderlineOffset: 2,
                                 }}>
                                 {formatTimecode(occurrence.start)}
-                              </Link>
+                              </Box>
                             </Box>
 
                             {occurrence.speaker && (
