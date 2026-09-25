@@ -8,6 +8,8 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith('/gatekeeper') ||
     pathname.startsWith('/api/auth') ||
+    // Portal Publisher's "sync now" ping; the portal-sync service verifies its HMAC signature.
+    pathname === '/api/portal-sync' ||
     pathname.includes('.') || // matches images, fonts, etc.
     pathname.startsWith('/_next')
   ) {
