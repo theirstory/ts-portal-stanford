@@ -334,7 +334,7 @@ export default function EntitiesPage() {
           )}
           <Box>
             <Typography component="h1" sx={{ fontSize: { xs: 22, sm: 28 }, fontWeight: 700, lineHeight: 1.15 }}>
-              {category === null ? 'Who and what the collection talks about' : getNerDisplayName(category)}
+              {category === null ? 'Named Entities' : getNerDisplayName(category)}
             </Typography>
             <Typography sx={{ color: colors.text.secondary, fontSize: 14.5, mt: 0.5, maxWidth: '68ch' }}>
               {category === null
@@ -721,19 +721,6 @@ export default function EntitiesPage() {
                 </Box>
               </Box>
             )}
-
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
-              <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>Fewer</Typography>
-              {[0.08, 0.3, 0.52, 0.72, 0.95].map((alpha) => (
-                <Box
-                  key={alpha}
-                  sx={{ width: 26, height: 12, borderRadius: 0.5, backgroundColor: hue, opacity: alpha }}
-                />
-              ))}
-              <Typography sx={{ fontSize: 12, color: colors.text.secondary }}>
-                More{max > 0 ? ` (up to ${max.toLocaleString()})` : ''}
-              </Typography>
-            </Box>
           </>
         )}
       </Box>
