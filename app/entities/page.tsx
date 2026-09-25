@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -17,6 +17,7 @@ import SwapVertIcon from '@mui/icons-material/SwapVert';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { colors } from '@/lib/theme';
 import { getNerColor, getNerDisplayName } from '@/config/organizationConfig';
@@ -85,20 +86,47 @@ const heatStyle = (value: number, max: number, hue: string): React.CSSProperties
   };
 };
 
-export default function EntitiesPage() {
+function EntitiesPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   const [data, setData] = useState<EntityAggregateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  /** null = category overview; otherwise the drilled-into NER label. */
-  const [category, setCategory] = useState<string | null>(null);
   const [showAllColumns, setShowAllColumns] = useState(false);
   const [showCounts, setShowCounts] = useState(true);
   const [filter, setFilter] = useState('');
-  const [selected, setSelected] = useState<{ entity: EntityAggregate; storyUuid: string } | null>(null);
-  /** Column to order rows by, or null for the default (busiest recording first). */
-  const [sort, setSort] = useState<{ columnKey: string; direction: 'desc' | 'asc' } | null>(null);
-  /** Recording to order columns by, or null for the category's own order. */
-  const [columnSort, setColumnSort] = useState<{ storyUuid: string; direction: 'desc' | 'asc' } | null>(null);
+
+  /**
+   * Which view is on screen lives in the URL, not in state, so a reader can
+   * link a colleague to one category — or to one entity in one recording —
+   * and the browser's own back button walks the views they came through.
+   * Transient controls (filter text, show-all, counts) stay local.
+   */
+  const category = searchParams.get('category');
+  const focusUuid = searchParams.get('focus');
+  const focusDirection = searchParams.get('focusDir') === 'asc' ? 'asc' : 'desc';
+  const sortColumn = searchParams.get('sortCol');
+  const sortDirection = searchParams.get('sortDir') === 'asc' ? 'asc' : 'desc';
+  const selectedEntityKey = searchParams.get('entity');
+  const selectedRecording = searchParams.get('recording');
+
+  const setParams = useCallback(
+    (changes: Record<string, string | null>, { replace = false }: { replace?: boolean } = {}) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(changes).forEach(([key, value]) => {
+        if (value === null) params.delete(key);
+        else params.set(key, value);
+      });
+      const query = params.toString();
+      const href = query ? `/entities?${query}` : '/entities';
+      if (replace) router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  const sort = sortColumn ? { columnKey: sortColumn, direction: sortDirection as 'desc' | 'asc' } : null;
+  const columnSort = focusUuid ? { storyUuid: focusUuid, direction: focusDirection as 'desc' | 'asc' } : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -258,19 +286,25 @@ export default function EntitiesPage() {
     return ordered;
   }, [baseRows, matrix, sort, columnSort]);
 
-  const toggleColumnSort = (storyUuid: string) =>
-    setColumnSort((current) => {
-      if (current?.storyUuid !== storyUuid) return { storyUuid, direction: 'desc' };
-      if (current.direction === 'desc') return { storyUuid, direction: 'asc' };
-      return null;
-    });
+  const toggleColumnSort = (storyUuid: string) => {
+    if (focusUuid !== storyUuid) return setParams({ focus: storyUuid, focusDir: 'desc' }, { replace: true });
+    if (focusDirection === 'desc') return setParams({ focus: storyUuid, focusDir: 'asc' }, { replace: true });
+    return setParams({ focus: null, focusDir: null }, { replace: true });
+  };
 
-  const toggleSort = (columnKey: string) =>
-    setSort((current) => {
-      if (current?.columnKey !== columnKey) return { columnKey, direction: 'desc' };
-      if (current.direction === 'desc') return { columnKey, direction: 'asc' };
-      return null;
-    });
+  const toggleSort = (columnKey: string) => {
+    if (sortColumn !== columnKey) return setParams({ sortCol: columnKey, sortDir: 'desc' }, { replace: true });
+    if (sortDirection === 'desc') return setParams({ sortCol: columnKey, sortDir: 'asc' }, { replace: true });
+    return setParams({ sortCol: null, sortDir: null }, { replace: true });
+  };
+
+  const selected = useMemo(() => {
+    if (!data || !selectedEntityKey || !selectedRecording) return null;
+    const entity = data.entities.find(
+      (candidate) => candidate.key === selectedEntityKey && (!category || candidate.label === category),
+    );
+    return entity ? { entity, storyUuid: selectedRecording } : null;
+  }, [data, selectedEntityKey, selectedRecording, category]);
 
   const focusedRowTitle =
     category !== null && columnSort
@@ -287,18 +321,24 @@ export default function EntitiesPage() {
       // "How does this category show up in this recording?" — drill in with the
       // recording's own entities ranked and its row first, rather than dropping
       // the reader into a collection-wide view they have to re-find it in.
-      setCategory(column.nerLabel);
       setShowAllColumns(false);
       setFilter('');
-      setSort(null);
-      setColumnSort({ storyUuid: row.storyUuid, direction: 'desc' });
+      setParams({
+        category: column.nerLabel,
+        focus: row.storyUuid,
+        focusDir: 'desc',
+        sortCol: null,
+        sortDir: null,
+        entity: null,
+        recording: null,
+      });
       return;
     }
 
     const entity = entityByColumn.get(column.key);
     if (!entity) return;
     if (!matrix.get(cellKey(row.storyUuid, column.key))) return;
-    setSelected({ entity, storyUuid: row.storyUuid });
+    setParams({ entity: entity.key, recording: row.storyUuid }, { replace: true });
   };
 
   const selectedStory = selected?.entity.stories.find((story) => story.storyUuid === selected.storyUuid);
@@ -322,17 +362,62 @@ export default function EntitiesPage() {
               size="small"
               aria-label="Back to all categories"
               onClick={() => {
-                setCategory(null);
                 setFilter('');
                 setShowAllColumns(false);
-                setSort(null);
-                setColumnSort(null);
+                setParams({
+                  category: null,
+                  focus: null,
+                  focusDir: null,
+                  sortCol: null,
+                  sortDir: null,
+                  entity: null,
+                  recording: null,
+                });
               }}
               sx={{ mt: 0.25 }}>
               <ArrowBackIcon fontSize="small" />
             </IconButton>
           )}
           <Box>
+            {/*
+              The back control names where it goes, not where you are — with
+              only the category beside an arrow it reads as "back to more
+              organizations" rather than "this page is Organization".
+            */}
+            {category !== null && (
+              <Typography
+                component="button"
+                type="button"
+                onClick={() => {
+                  setFilter('');
+                  setShowAllColumns(false);
+                  setParams({
+                    category: null,
+                    focus: null,
+                    focusDir: null,
+                    sortCol: null,
+                    sortDir: null,
+                    entity: null,
+                    recording: null,
+                  });
+                }}
+                sx={{
+                  display: 'block',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: '0.02em',
+                  color: colors.text.secondary,
+                  background: 'none',
+                  border: 'none',
+                  p: 0,
+                  mb: 0.25,
+                  cursor: 'pointer',
+                  font: 'inherit',
+                  '&:hover': { color: colors.primary.main, textDecoration: 'underline' },
+                }}>
+                Named Entities
+              </Typography>
+            )}
             <Typography component="h1" sx={{ fontSize: { xs: 22, sm: 28 }, fontWeight: 700, lineHeight: 1.15 }}>
               {category === null ? 'Named Entities' : getNerDisplayName(category)}
             </Typography>
@@ -472,11 +557,17 @@ export default function EntitiesPage() {
                               onClick={
                                 category === null
                                   ? () => {
-                                      setCategory(column.nerLabel);
                                       setShowAllColumns(false);
                                       setFilter('');
-                                      setSort(null);
-                                      setColumnSort(null);
+                                      setParams({
+                                        category: column.nerLabel,
+                                        focus: null,
+                                        focusDir: null,
+                                        sortCol: null,
+                                        sortDir: null,
+                                        entity: null,
+                                        recording: null,
+                                      });
                                     }
                                   : undefined
                               }
@@ -749,10 +840,24 @@ export default function EntitiesPage() {
               variants: selected.entity.variants.map((variant) => variant.text),
               focusStoryUuid: selected.storyUuid,
             }}
-            onClose={() => setSelected(null)}
+            onClose={() => setParams({ entity: null, recording: null }, { replace: true })}
           />
         </Box>
       )}
     </Box>
+  );
+}
+
+export default function EntitiesPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 4, color: colors.text.secondary }}>
+          <CircularProgress size={18} />
+          <Typography sx={{ fontSize: 14 }}>Loading…</Typography>
+        </Box>
+      }>
+      <EntitiesPageContent />
+    </Suspense>
   );
 }
