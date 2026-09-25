@@ -1,3 +1,5 @@
+import { getDataVersion } from '@/lib/data-version';
+import { ifNoneMatch, makeEtag, notModified } from '@/lib/http-cache';
 import { fetchStoryTranscriptByUuid } from '@/lib/weaviate/search';
 import type { Transcription, Word } from '@/types/transcription';
 
@@ -19,6 +21,15 @@ const MAX_CUE_CHARS = 84;
 const MAX_CUE_SECONDS = 6;
 /** A gap this long reads as a new utterance rather than a continuation. */
 const CUE_BREAK_GAP_SECONDS = 1.2;
+
+/**
+ * Browsers revalidate every time; the ETag changes when portal-sync changes the
+ * data (the data version), so a republished transcript shows up on the next
+ * load. The hourly bucket caps staleness from changes made outside portal-sync
+ * at what the old `max-age=3600` allowed.
+ */
+const CACHE_CONTROL = 'private, no-cache';
+const ETAG_BUCKET_MS = 60 * 60_000;
 
 const timestamp = (seconds: number): string => {
   const safe = Math.max(0, seconds);
@@ -110,6 +121,10 @@ export async function GET(request: Request) {
     return new Response('storyId is required', { status: 400 });
   }
 
+  // storyId (the Testimony uuid) is the only input that affects the output.
+  const etag = makeEtag('captions', getDataVersion(), storyId, Math.floor(Date.now() / ETAG_BUCKET_MS));
+  if (ifNoneMatch(request, etag)) return notModified(etag, CACHE_CONTROL);
+
   try {
     const story = await fetchStoryTranscriptByUuid(storyId);
     const raw = story?.properties?.transcription;
@@ -126,8 +141,8 @@ export async function GET(request: Request) {
     return new Response(toVtt(cues), {
       headers: {
         'content-type': 'text/vtt; charset=utf-8',
-        // The transcript only changes when the recording is republished.
-        'cache-control': 'private, max-age=3600',
+        'cache-control': CACHE_CONTROL,
+        etag,
       },
     });
   } catch (error) {

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getDataVersion } from '@/lib/data-version';
+import { ifNoneMatch, makeEtag, notModified } from '@/lib/http-cache';
 
 /**
  * Poster frame picker.
@@ -33,7 +35,27 @@ const PROBE_TIMEOUT_MS = 8000;
  * thumbnails for the same recordings, and without this each one would kick off
  * its own probe before the first finished.
  */
-const posterTimeCache = new Map<string, Promise<number>>();
+type PosterCache = { version: string; times: Map<string, Promise<number>> };
+
+// One per server process; dropped whenever portal-sync changes the data (a
+// replaced recording can have a different duration or picture).
+const store = globalThis as typeof globalThis & { __posterTimeCache?: PosterCache };
+
+function posterTimeCache(version: string): Map<string, Promise<number>> {
+  if (!store.__posterTimeCache || store.__posterTimeCache.version !== version) {
+    store.__posterTimeCache = { version, times: new Map() };
+  }
+  return store.__posterTimeCache.times;
+}
+
+/**
+ * Short browser cache plus revalidation: the chosen frame rarely changes, but a
+ * replaced or removed recording should not keep a stale poster for a day.
+ * stale-while-revalidate keeps thumbnails instant while the check runs in the
+ * background; the ETag carries the data version, so after a sync the next
+ * revalidation re-picks the frame and otherwise answers 304.
+ */
+const CACHE_CONTROL = 'public, max-age=300, stale-while-revalidate=86400';
 
 const isValidPlaybackId = (value: string): boolean => /^[A-Za-z0-9]+$/.test(value);
 
@@ -80,13 +102,14 @@ async function probeForPosterTime(playbackId: string, duration: number): Promise
   return best.time;
 }
 
-function pickPosterTime(playbackId: string, duration: number): Promise<number> {
+function pickPosterTime(playbackId: string, duration: number, version: string): Promise<number> {
+  const times = posterTimeCache(version);
   const cacheKey = `${playbackId}:${Math.floor(duration)}`;
-  const cached = posterTimeCache.get(cacheKey);
+  const cached = times.get(cacheKey);
   if (cached) return cached;
 
   const pending = probeForPosterTime(playbackId, duration).catch(() => DEFAULT_TIME);
-  posterTimeCache.set(cacheKey, pending);
+  times.set(cacheKey, pending);
   return pending;
 }
 
@@ -97,6 +120,11 @@ export async function GET(request: NextRequest) {
   if (!playbackId || !isValidPlaybackId(playbackId)) {
     return NextResponse.json({ error: 'A valid playbackId is required' }, { status: 400 });
   }
+
+  // Every query parameter feeds the redirect target, so all of them go in the ETag.
+  const version = getDataVersion();
+  const etag = makeEtag('thumb', version, [...searchParams].sort().join('&'));
+  if (ifNoneMatch(request, etag)) return notModified(etag, CACHE_CONTROL);
 
   const kind = searchParams.get('kind') === 'gif' ? 'gif' : 'image';
   const width = searchParams.get('width') ?? '320';
@@ -110,7 +138,7 @@ export async function GET(request: NextRequest) {
   const time =
     requestedTime != null && requestedTime !== '' && Number.isFinite(Number(requestedTime))
       ? Math.max(0, Math.floor(Number(requestedTime)))
-      : await pickPosterTime(playbackId, duration);
+      : await pickPosterTime(playbackId, duration, version);
 
   const params = new URLSearchParams({ width, fit_mode: fitMode });
   if (height) params.set('height', height);
@@ -130,9 +158,6 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.redirect(target, {
     status: 302,
-    headers: {
-      // The chosen frame is stable for a given recording, so let clients keep it.
-      'Cache-Control': 'public, max-age=86400',
-    },
+    headers: { 'Cache-Control': CACHE_CONTROL, ETag: etag },
   });
 }
