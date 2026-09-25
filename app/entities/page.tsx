@@ -299,11 +299,14 @@ function EntitiesPageContent() {
   };
 
   const selected = useMemo(() => {
-    if (!data || !selectedEntityKey || !selectedRecording) return null;
+    if (!data || !selectedEntityKey) return null;
     const entity = data.entities.find(
       (candidate) => candidate.key === selectedEntityKey && (!category || candidate.label === category),
     );
-    return entity ? { entity, storyUuid: selectedRecording } : null;
+    // A recording is optional. Selecting a square asks about one recording, so
+    // its group opens and the rest stay closed; selecting the column asks about
+    // the entity across the collection, so every group opens.
+    return entity ? { entity, storyUuid: selectedRecording ?? undefined } : null;
   }, [data, selectedEntityKey, selectedRecording, category]);
 
   const focusedRowTitle =
@@ -341,7 +344,6 @@ function EntitiesPageContent() {
     setParams({ entity: entity.key, recording: row.storyUuid }, { replace: true });
   };
 
-  const selectedStory = selected?.entity.stories.find((story) => story.storyUuid === selected.storyUuid);
   const hue = category ? getNerColor(category) : colors.primary.main;
 
   return (
@@ -550,27 +552,36 @@ function EntitiesPageContent() {
                             width: CELL_WIDTH,
                             minWidth: CELL_WIDTH,
                           }}>
-                          <Tooltip title={category === null ? `See every ${column.label.toLowerCase()}` : column.label}>
+                          <Tooltip
+                            title={
+                              category === null
+                                ? `See every ${column.label.toLowerCase()}`
+                                : `Every mention of ${column.label} in the collection`
+                            }>
                             <Box
-                              component={category === null ? 'button' : 'div'}
-                              type={category === null ? 'button' : undefined}
-                              onClick={
-                                category === null
-                                  ? () => {
-                                      setShowAllColumns(false);
-                                      setFilter('');
-                                      setParams({
-                                        category: column.nerLabel,
-                                        focus: null,
-                                        focusDir: null,
-                                        sortCol: null,
-                                        sortDir: null,
-                                        entity: null,
-                                        recording: null,
-                                      });
-                                    }
-                                  : undefined
-                              }
+                              component="button"
+                              type="button"
+                              onClick={() => {
+                                if (category === null) {
+                                  setShowAllColumns(false);
+                                  setFilter('');
+                                  setParams({
+                                    category: column.nerLabel,
+                                    focus: null,
+                                    focusDir: null,
+                                    sortCol: null,
+                                    sortDir: null,
+                                    entity: null,
+                                    recording: null,
+                                  });
+                                  return;
+                                }
+                                // Inside a category the column is one entity, so
+                                // the header asks about it across every
+                                // recording — no focus recording, so the panel
+                                // opens with all of them expanded.
+                                setParams({ entity: column.key, recording: null }, { replace: true });
+                              }}
                               sx={{
                                 height: 150,
                                 width: '100%',
@@ -582,8 +593,8 @@ function EntitiesPageContent() {
                                 border: 'none',
                                 font: 'inherit',
                                 color: 'inherit',
-                                cursor: category === null ? 'pointer' : 'default',
-                                '&:hover': category === null ? { backgroundColor: colors.background.subtle } : {},
+                                cursor: 'pointer',
+                                '&:hover': { backgroundColor: colors.background.subtle },
                               }}>
                               <Typography
                                 sx={{
