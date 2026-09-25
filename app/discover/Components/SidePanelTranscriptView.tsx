@@ -2,6 +2,8 @@
 
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Box, Button, IconButton, Tooltip, Typography, CircularProgress, useMediaQuery, useTheme } from '@mui/material';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import MuxPlayer from '@mux/mux-player-react';
@@ -162,6 +164,43 @@ export const SidePanelTranscriptView = ({
       setCurrentTime(videoRef.current.currentTime);
     }
   }, []);
+
+  const orderedNer = useMemo(
+    () => [...(nerHighlights ?? [])].sort((a, b) => a.startTime - b.startTime),
+    [nerHighlights],
+  );
+
+  const activeNerIndex = useMemo(() => {
+    if (orderedNer.length === 0 || activeNerStart === undefined) return -1;
+    let best = 0;
+    let bestDistance = Infinity;
+    orderedNer.forEach((highlight, index) => {
+      const distance = Math.abs(highlight.startTime - activeNerStart);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = index;
+      }
+    });
+    return best;
+  }, [orderedNer, activeNerStart]);
+
+  const goToMention = useCallback(
+    (index: number) => {
+      const target = orderedNer[index];
+      if (!target) return;
+      onActiveNerChange?.(target.startTime);
+      if (videoRef.current) videoRef.current.currentTime = target.startTime;
+    },
+    [orderedNer, onActiveNerChange],
+  );
+
+  // Bring the current mention into view, whether it was reached by the arrows
+  // or by selecting a different one in the list.
+  useEffect(() => {
+    if (!data || activeNerStart === undefined) return;
+    const container = transcriptContainerRef.current;
+    container?.querySelector('[data-active-ner="true"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [data, activeNerStart]);
 
   const handleWordClick = useCallback((time: number) => {
     if (videoRef.current) {
@@ -424,6 +463,39 @@ export const SidePanelTranscriptView = ({
               style={{ ...muxPlayerThemeProps.style, aspectRatio: data.isAudioFile ? 'auto' : '21/9' }}
             />
           </Box>
+
+          {orderedNer.length > 0 && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 0.75,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                flexShrink: 0,
+              }}>
+              <Typography variant="caption" color="text.secondary">
+                Mention {activeNerIndex + 1} of {orderedNer.length}
+              </Typography>
+              <Box sx={{ flexGrow: 1 }} />
+              <IconButton
+                size="small"
+                aria-label="Previous mention"
+                disabled={activeNerIndex <= 0}
+                onClick={() => goToMention(activeNerIndex - 1)}>
+                <KeyboardArrowUpIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                aria-label="Next mention"
+                disabled={activeNerIndex < 0 || activeNerIndex >= orderedNer.length - 1}
+                onClick={() => goToMention(activeNerIndex + 1)}>
+                <KeyboardArrowDownIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          )}
 
           <TranscriptSearchBar
             placeholder={placeholder}

@@ -235,6 +235,7 @@ export const EntityDetailPanel = ({ target, onClose }: { target: EntityDetailTar
             label: target.label,
           }))}
           activeNerStart={playing.start}
+          onActiveNerChange={(start) => setPlaying({ storyUuid: playingRecording.storyUuid, start })}
         />
       )}
 

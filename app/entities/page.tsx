@@ -706,7 +706,14 @@ function EntitiesPageContent() {
                             }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                               <Link
-                                href={`/story/${row.storyUuid}`}
+                                // Carry the category through, so the recording
+                                // opens with these entities already highlighted
+                                // rather than making the reader re-find them.
+                                href={
+                                  category
+                                    ? `/story/${row.storyUuid}?nerLabel=${encodeURIComponent(category)}`
+                                    : `/story/${row.storyUuid}`
+                                }
                                 title={row.title}
                                 // Takes the slack and truncates, so every sort
                                 // control lands on the same vertical line
