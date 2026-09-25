@@ -42,19 +42,36 @@ body {
   }
 }
 
+/*
+ * A white 3px thumb was invisible on every light panel in the portal — the
+ * transcript scrolled with no indication that it could. Neutral and slightly
+ * wider reads on white without competing with the text, and darkens on hover
+ * so it can be found and grabbed.
+ */
 ::-webkit-scrollbar {
-  width: 3px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #fff;
+  background: rgba(0, 0, 0, 0.24);
   border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.4);
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
   margin-top: 10px;
   margin-bottom: 10px;
+}
+
+/* Firefox has no pseudo-elements for this. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.24) transparent;
 }
 
 mux-player::part(poster) {
