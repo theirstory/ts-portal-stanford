@@ -828,10 +828,8 @@ function EntitiesPageContent() {
             width: { xs: '100%', md: 480, lg: 560 },
             borderLeft: '1px solid',
             borderColor: 'divider',
-            position: 'sticky',
-            top: 0,
-            alignSelf: 'flex-start',
-            height: '100vh',
+            height: '100%',
+            minHeight: 0,
           }}>
           <EntityDetailPanel
             target={{
