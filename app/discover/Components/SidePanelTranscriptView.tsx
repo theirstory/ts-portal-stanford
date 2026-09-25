@@ -17,6 +17,7 @@ import { TranscriptSection } from './transcript/TranscriptSection';
 import { TranscriptSearchBar } from './transcript/TranscriptSearchBar';
 import { NerHighlight, SearchMode, ThematicMatch, TranscriptData } from './transcript/transcriptTypes';
 import type { Citation } from '@/types/chat';
+import { TranscriptCaptionsTrack } from '@/components/TranscriptCaptionsTrack';
 
 /** Merge overlapping / near-adjacent thematic matches so researchers see distinct passages. */
 function mergeThematicMatches(matches: ThematicMatch[], gapSeconds = 2): ThematicMatch[] {
@@ -473,6 +474,7 @@ export const SidePanelTranscriptView = ({
           {/* Video player — compact */}
           <Box sx={{ flexShrink: 0, bgcolor: colors.common.black }}>
             <MuxPlayer
+              defaultHiddenCaptions={false}
               ref={videoRef}
               src={data.videoUrl}
               audio={data.isAudioFile}
@@ -481,8 +483,9 @@ export const SidePanelTranscriptView = ({
               backwardSeekOffset={10}
               accentColor={muxPlayerThemeProps.accentColor}
               onTimeUpdate={handleTimeUpdate}
-              style={{ ...muxPlayerThemeProps.style, aspectRatio: data.isAudioFile ? 'auto' : '21/9' }}
-            />
+              style={{ ...muxPlayerThemeProps.style, aspectRatio: data.isAudioFile ? 'auto' : '21/9' }}>
+              <TranscriptCaptionsTrack storyId={storyId} />
+            </MuxPlayer>
           </Box>
 
           {orderedNer.length > 0 && (

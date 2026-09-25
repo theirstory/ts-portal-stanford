@@ -9,6 +9,7 @@ import { Citation } from '@/types/chat';
 import { colors } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { formatTime } from './helpers';
+import { TranscriptCaptionsTrack } from '@/components/TranscriptCaptionsTrack';
 
 type FloatingChatRecordingViewProps = {
   citation: Citation;
@@ -16,11 +17,7 @@ type FloatingChatRecordingViewProps = {
   onOpenTranscript: (citation: Citation) => void;
 };
 
-export function FloatingChatRecordingView({
-  citation,
-  onBack,
-  onOpenTranscript,
-}: FloatingChatRecordingViewProps) {
+export function FloatingChatRecordingView({ citation, onBack, onOpenTranscript }: FloatingChatRecordingViewProps) {
   return (
     <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <Box
@@ -48,14 +45,16 @@ export function FloatingChatRecordingView({
 
       <Box sx={{ flexShrink: 0, bgcolor: colors.common.black }}>
         <MuxPlayer
+          defaultHiddenCaptions={false}
           src={citation.videoUrl}
           audio={citation.isAudioFile}
           startTime={citation.startTime}
           forwardSeekOffset={10}
           backwardSeekOffset={10}
           accentColor={muxPlayerThemeProps.accentColor}
-          style={{ ...muxPlayerThemeProps.style, aspectRatio: citation.isAudioFile ? 'auto' : '16/9' }}
-        />
+          style={{ ...muxPlayerThemeProps.style, aspectRatio: citation.isAudioFile ? 'auto' : '16/9' }}>
+          <TranscriptCaptionsTrack storyId={citation.theirstoryId} />
+        </MuxPlayer>
       </Box>
 
       <Box sx={{ px: 2, py: 2, flex: 1 }}>

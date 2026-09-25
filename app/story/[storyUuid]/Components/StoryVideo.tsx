@@ -12,6 +12,7 @@ import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { AudioFileWave } from '@/app/assets/svg/AudioFileWave';
 import { getMuxPlaybackId } from '@/app/utils/converters';
 import { config } from '@/config/organizationConfig';
+import { TranscriptCaptionsTrack } from '@/components/TranscriptCaptionsTrack';
 
 export const StoryVideo = () => {
   const { storyHubPage } = useSemanticSearchStore();
@@ -30,7 +31,8 @@ export const StoryVideo = () => {
     : posterDuration
       ? `&duration=${posterDuration}`
       : '';
-  const posterUrl = !isAudioFile && playbackId ? `/api/thumbnail?playbackId=${playbackId}&width=1280${posterHint}` : undefined;
+  const posterUrl =
+    !isAudioFile && playbackId ? `/api/thumbnail?playbackId=${playbackId}&width=1280${posterHint}` : undefined;
   const isMobile = useMediaQuery(theme.breakpoints.down('lg'));
 
   // Throttle the setCurrentTime to avoid performance issues
@@ -93,6 +95,7 @@ export const StoryVideo = () => {
         zIndex={2}
         sx={{ background: 'transparent' }}>
         <MuxPlayer
+          defaultHiddenCaptions={false}
           autoPlay={isMobile} // this is important because will break the word highlighting if the user has to manually start the video on mobile
           ref={videoRef}
           src={videoSrc}
@@ -161,8 +164,9 @@ export const StoryVideo = () => {
             enableWorker: true, // Enable web worker
             fragLoadingTimeOut: 20000, // 20s timeout
             manifestLoadingTimeOut: 10000, // 10s timeout
-          }}
-        />
+          }}>
+          <TranscriptCaptionsTrack storyId={storyHubPage?.uuid} />
+        </MuxPlayer>
       </Box>
     </Box>
   );

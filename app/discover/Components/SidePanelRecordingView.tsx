@@ -1,7 +1,16 @@
 'use client';
 
 import React, { useRef, useEffect, useState, useMemo } from 'react';
-import { Box, Typography, Button, TextField, InputAdornment, Tooltip, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Button,
+  TextField,
+  InputAdornment,
+  Tooltip,
+  ToggleButtonGroup,
+  ToggleButton,
+} from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArticleIcon from '@mui/icons-material/Article';
 import SearchIcon from '@mui/icons-material/Search';
@@ -15,6 +24,7 @@ import { colors } from '@/lib/theme';
 import { muxPlayerThemeProps } from '@/lib/theme/muxPlayerTheme';
 import { CitationBadge, GroupedSourcesView, NumberedSourcesView } from './recording/RecordingSourcesViews';
 import { CHAPTER_COLOR, CLIP_COLOR, formatTime } from './recording/recordingViewShared';
+import { TranscriptCaptionsTrack } from '@/components/TranscriptCaptionsTrack';
 
 export const SidePanelRecordingView = () => {
   const activeCitation = useChatStore((s) => s.activeCitation);
@@ -94,6 +104,7 @@ export const SidePanelRecordingView = () => {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2 }}>
           <Box sx={{ borderRadius: 2, overflow: 'hidden', bgcolor: colors.common.black }}>
             <MuxPlayer
+              defaultHiddenCaptions={false}
               ref={videoRef}
               src={activeCitation.videoUrl}
               audio={activeCitation.isAudioFile}
@@ -101,8 +112,9 @@ export const SidePanelRecordingView = () => {
               forwardSeekOffset={10}
               backwardSeekOffset={10}
               accentColor={muxPlayerThemeProps.accentColor}
-              style={{ ...muxPlayerThemeProps.style, aspectRatio: activeCitation.isAudioFile ? 'auto' : '16/9' }}
-            />
+              style={{ ...muxPlayerThemeProps.style, aspectRatio: activeCitation.isAudioFile ? 'auto' : '16/9' }}>
+              <TranscriptCaptionsTrack storyId={activeCitation.theirstoryId} />
+            </MuxPlayer>
           </Box>
 
           <Box>
@@ -210,9 +222,17 @@ export const SidePanelRecordingView = () => {
       {/* Scrollable content — recording headers stick within this */}
       <Box sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
         {listMode === 'recording' ? (
-          <GroupedSourcesView citations={filteredCitations} filterTerm={filterTerm} onSelectCitation={handleSelectCitation} />
+          <GroupedSourcesView
+            citations={filteredCitations}
+            filterTerm={filterTerm}
+            onSelectCitation={handleSelectCitation}
+          />
         ) : (
-          <NumberedSourcesView citations={filteredCitations} filterTerm={filterTerm} onSelectCitation={handleSelectCitation} />
+          <NumberedSourcesView
+            citations={filteredCitations}
+            filterTerm={filterTerm}
+            onSelectCitation={handleSelectCitation}
+          />
         )}
       </Box>
     </Box>
