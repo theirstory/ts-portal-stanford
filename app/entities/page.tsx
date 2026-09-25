@@ -601,6 +601,9 @@ export default function EntitiesPage() {
                               zIndex: 2,
                               backgroundColor: isFocusedRow ? colors.background.subtle : colors.background.paper,
                               boxShadow: isFocusedRow ? `inset 3px 0 0 ${colors.primary.main}` : 'none',
+                              transition: 'background-color 120ms ease',
+                              // Matches the column headers, so both axes read as the same control.
+                              '&:hover': { backgroundColor: colors.background.subtle },
                               borderRight: `1px solid ${colors.common.border}`,
                               borderBottom: `1px solid ${colors.common.border}`,
                               textAlign: 'left',
