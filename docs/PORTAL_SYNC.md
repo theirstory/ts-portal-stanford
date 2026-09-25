@@ -308,7 +308,9 @@ for 3h+ interviews on slow hosts, then recreate `portal-sync`.
 
 After a run that synced or removed something, `data-version.json` is bumped, and frontend code
 that uses `getDataVersion()` drops its caches within about 2 seconds. A manual `weaviate:import` (or
-any other change made outside portal-sync) does **not** bump it. To bump it by hand:
+any other change made outside portal-sync) does **not** bump it. In this fork the entities index
+(`/api/entities`) and the captions and thumbnail ETags are keyed on it; without a bump, entities
+refresh within 5 minutes and captions within an hour. To bump it by hand:
 
 ```bash
 docker compose -f docker-compose.prod.yml exec -T portal-sync node -e "
