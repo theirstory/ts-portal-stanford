@@ -103,6 +103,23 @@ export const SidePanelTranscriptView = ({
   const highlightStart = transcriptCitation?.startTime ?? 0;
   const highlightEnd = transcriptCitation?.endTime ?? 0;
 
+  // The player is told where to start once per recording. Feeding it a new
+  // startTime on every step makes it reload the source; stepping seeks the
+  // element directly instead.
+  const [playerStartTime, setPlayerStartTime] = useState(highlightStart);
+  useEffect(() => {
+    setPlayerStartTime(transcriptCitation?.startTime ?? 0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyId]);
+
+  // Moving to another moment in the same recording is not a reason to load the
+  // transcript again — it only changes where to scroll. Keeping highlightStart
+  // in the fetch's dependencies re-ran it on every step and put the loading
+  // spinner over a transcript that was already on screen.
+  useEffect(() => {
+    hasScrolledRef.current = false;
+  }, [highlightStart]);
+
   // Fetch transcript data
   useEffect(() => {
     if (!storyId) return;
@@ -122,7 +139,7 @@ export const SidePanelTranscriptView = ({
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [storyId, highlightStart]);
+  }, [storyId]);
 
   // Scroll to the active word after data loads
   useEffect(() => {
@@ -184,14 +201,18 @@ export const SidePanelTranscriptView = ({
     return best;
   }, [orderedNer, activeNerStart]);
 
-  const goToMention = useCallback(
-    (index: number) => {
-      const target = orderedNer[index];
+  /** Steps through mentions, wrapping at either end. */
+  const stepMention = useCallback(
+    (delta: number) => {
+      if (orderedNer.length === 0) return;
+      const from = activeNerIndex < 0 ? 0 : activeNerIndex;
+      const next = (from + delta + orderedNer.length) % orderedNer.length;
+      const target = orderedNer[next];
       if (!target) return;
       onActiveNerChange?.(target.startTime);
       if (videoRef.current) videoRef.current.currentTime = target.startTime;
     },
-    [orderedNer, onActiveNerChange],
+    [orderedNer, activeNerIndex, onActiveNerChange],
   );
 
   // Bring the current mention into view, whether it was reached by the arrows
@@ -455,7 +476,7 @@ export const SidePanelTranscriptView = ({
               ref={videoRef}
               src={data.videoUrl}
               audio={data.isAudioFile}
-              startTime={highlightStart}
+              startTime={playerStartTime}
               forwardSeekOffset={10}
               backwardSeekOffset={10}
               accentColor={muxPlayerThemeProps.accentColor}
@@ -480,18 +501,10 @@ export const SidePanelTranscriptView = ({
                 Mention {activeNerIndex + 1} of {orderedNer.length}
               </Typography>
               <Box sx={{ flexGrow: 1 }} />
-              <IconButton
-                size="small"
-                aria-label="Previous mention"
-                disabled={activeNerIndex <= 0}
-                onClick={() => goToMention(activeNerIndex - 1)}>
+              <IconButton size="small" aria-label="Previous mention" onClick={() => stepMention(-1)}>
                 <KeyboardArrowUpIcon fontSize="small" />
               </IconButton>
-              <IconButton
-                size="small"
-                aria-label="Next mention"
-                disabled={activeNerIndex < 0 || activeNerIndex >= orderedNer.length - 1}
-                onClick={() => goToMention(activeNerIndex + 1)}>
+              <IconButton size="small" aria-label="Next mention" onClick={() => stepMention(1)}>
                 <KeyboardArrowDownIcon fontSize="small" />
               </IconButton>
             </Box>
