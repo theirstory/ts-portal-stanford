@@ -21,7 +21,7 @@ import useLayoutState from '@/app/stores/useLayout';
 export default function CollectionLayout() {
   const { loading: semanticSearchLoading, stories, result, currentPage, hasSearched } = useSemanticSearchStore();
   const { setTopBarCollapsedAuto } = useLayoutState();
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
 
   const storiesTestimonies = stories as WeaviateReturn<Testimonies, any> | null;
   const results = result?.objects || [];
